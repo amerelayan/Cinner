@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import RatingBadge from "@/components/RatingBadge";
+import TrackButton from "@/components/TrackButton";
+import StarRating from "@/components/StarRating";
 
 type MovieDetail = {
   tmdb_id: number;
@@ -28,12 +30,6 @@ type MovieDetail = {
 };
 
 const POSTER_BASE = "https://image.tmdb.org/t/p/w400";
-const RATING_OPTIONS = Array.from({ length: 19 }, (_, i) => 1 + i * 0.5);
-
-const ACTION_BUTTON =
-  "rounded border border-border px-4 py-2 text-sm tracking-wide text-foreground transition-colors hover:border-accent";
-const ACTION_BUTTON_ACTIVE =
-  "rounded border border-accent bg-accent/10 px-4 py-2 text-sm tracking-wide text-accent transition-colors hover:bg-accent/20";
 
 export default function MovieDetailPage() {
   const params = useParams<{ id: string }>();
@@ -42,7 +38,6 @@ export default function MovieDetailPage() {
   const [movie, setMovie] = useState<MovieDetail | null>(null);
   const [error, setError] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [ratingChoice, setRatingChoice] = useState<string>("");
   const [message, setMessage] = useState("");
 
   async function load() {
@@ -58,7 +53,6 @@ export default function MovieDetailPage() {
     }
     const data: MovieDetail = await res.json();
     setMovie(data);
-    setRatingChoice(data.your_rating !== null ? String(data.your_rating) : "");
   }
 
   useEffect(() => {
@@ -66,13 +60,13 @@ export default function MovieDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tmdbId]);
 
-  async function handleRate() {
-    if (!token || !ratingChoice) return;
+  async function handleRate(rating: number) {
+    if (!token) return;
     setMessage("");
     const res = await fetch("http://localhost:8000/ratings", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ tmdb_id: Number(tmdbId), rating: Number(ratingChoice) }),
+      body: JSON.stringify({ tmdb_id: Number(tmdbId), rating }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -206,41 +200,32 @@ export default function MovieDetailPage() {
 
           <div className="mt-8 border-t border-border pt-6">
             {token ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <select
-                  value={ratingChoice}
-                  onChange={(e) => setRatingChoice(e.target.value)}
-                  className="text-sm"
-                >
-                  <option value="">Rate...</option>
-                  {RATING_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={handleRate} disabled={!ratingChoice} className={ACTION_BUTTON}>
-                  Submit
-                </button>
+              <div className="flex flex-wrap items-center gap-5">
+                <StarRating value={movie.your_rating} onRate={handleRate} />
                 {movie.your_rating !== null && (
-                  <button onClick={handleClearRating} className={ACTION_BUTTON}>
-                    Clear rating
+                  <button
+                    onClick={handleClearRating}
+                    className="text-xs text-muted transition-colors hover:text-accent"
+                  >
+                    Clear
                   </button>
                 )}
 
-                <button
+                <TrackButton
+                  icon="eye"
+                  active={movie.watched}
+                  inactiveLabel="Watch"
+                  activeLabel="Watched"
                   onClick={toggleWatched}
-                  className={movie.watched ? ACTION_BUTTON_ACTIVE : ACTION_BUTTON}
-                >
-                  {movie.watched ? "Watched ✓" : "Mark as Watched"}
-                </button>
+                />
 
-                <button
+                <TrackButton
+                  icon="bookmark"
+                  active={movie.in_watchlist}
+                  inactiveLabel="Watchlist"
+                  activeLabel="In Watchlist"
                   onClick={toggleWatchlist}
-                  className={movie.in_watchlist ? ACTION_BUTTON_ACTIVE : ACTION_BUTTON}
-                >
-                  {movie.in_watchlist ? "On Watchlist ✓" : "Add to Watchlist"}
-                </button>
+                />
 
                 {message && <p className="w-full text-sm text-accent">{message}</p>}
               </div>

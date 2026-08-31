@@ -11,6 +11,7 @@ type Profile = {
   profile_picture_url: string | null;
   location: string | null;
   watched_count: number;
+  watchlist_count: number;
 };
 
 const POSTER_BASE = "https://image.tmdb.org/t/p/w200";
@@ -126,9 +127,18 @@ export default function ProfilePage() {
 
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm text-muted sm:justify-start">
               <span>{profile.location ?? "Location not set"}</span>
-              <span>
+              <Link
+                href="/profile/watched"
+                className="transition-colors hover:text-accent"
+              >
                 <span className="text-foreground">{profile.watched_count}</span> films watched
-              </span>
+              </Link>
+              <Link
+                href="/profile/watchlist"
+                className="transition-colors hover:text-accent"
+              >
+                <span className="text-foreground">{profile.watchlist_count}</span> in watchlist
+              </Link>
             </div>
 
             {editing ? (

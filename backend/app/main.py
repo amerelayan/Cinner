@@ -259,6 +259,25 @@ async def remove_favorite(tmdb_id: int, user: dict = Depends(get_current_user)):
     await _remove_movie_membership("favorites", user["sub"], tmdb_id)
 
 
+@app.get("/watched")
+async def get_watched(user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT m.id AS tmdb_id, m.title, m.release_date, m.poster_path
+            FROM public.watched w
+            JOIN public.movies m ON m.id = w.movie_id
+            WHERE w.user_id = $1
+            ORDER BY w.created_at DESC
+            """,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"watched": [dict(row) for row in rows]}
+
+
 @app.post("/watched", status_code=201)
 async def add_watched(payload: MovieAction, user: dict = Depends(get_current_user)):
     await _add_movie_membership("watched", user["sub"], payload.tmdb_id)
@@ -268,6 +287,25 @@ async def add_watched(payload: MovieAction, user: dict = Depends(get_current_use
 @app.delete("/watched/{tmdb_id}", status_code=204)
 async def remove_watched(tmdb_id: int, user: dict = Depends(get_current_user)):
     await _remove_movie_membership("watched", user["sub"], tmdb_id)
+
+
+@app.get("/watchlist")
+async def get_watchlist(user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT m.id AS tmdb_id, m.title, m.release_date, m.poster_path
+            FROM public.watchlist wl
+            JOIN public.movies m ON m.id = wl.movie_id
+            WHERE wl.user_id = $1
+            ORDER BY wl.created_at DESC
+            """,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"watchlist": [dict(row) for row in rows]}
 
 
 @app.post("/watchlist", status_code=201)
@@ -379,9 +417,12 @@ async def get_profile(user: dict = Depends(get_current_user)):
         watched_count = await conn.fetchval(
             "SELECT count(*) FROM public.watched WHERE user_id = $1", user["sub"]
         )
+        watchlist_count = await conn.fetchval(
+            "SELECT count(*) FROM public.watchlist WHERE user_id = $1", user["sub"]
+        )
     finally:
         await conn.close()
-    return {**dict(row), "watched_count": watched_count}
+    return {**dict(row), "watched_count": watched_count, "watchlist_count": watchlist_count}
 
 
 class LocationUpdate(BaseModel):
