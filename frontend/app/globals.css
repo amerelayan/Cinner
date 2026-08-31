@@ -59,6 +59,12 @@ a {
   }
 }
 
+.poster-float {
+  animation-name: poster-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .poster-float {
     animation: none !important;

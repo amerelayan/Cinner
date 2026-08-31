@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import FilmReelIcon from "@/components/FilmReelIcon";
+
+const BUTTON_FONT = "font-display font-semibold tracking-[0.1em]";
 
 export default function NavBar() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
@@ -23,8 +26,9 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link href="/" className="font-display text-xl tracking-[0.15em] text-accent">
-          CINNER
+        <Link href="/" className="flex items-center gap-2 text-accent">
+          <FilmReelIcon className="h-5 w-5" />
+          <span className="font-display text-xl tracking-[0.15em]">CINNER</span>
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm tracking-wide text-muted sm:flex">
@@ -49,7 +53,7 @@ export default function NavBar() {
               </Link>
               <button
                 onClick={handleLogout}
-                className="rounded border border-border px-4 py-1.5 text-sm tracking-wide text-foreground transition-colors hover:border-accent"
+                className={`rounded border border-border px-4 py-1.5 text-sm text-foreground transition-colors hover:border-accent ${BUTTON_FONT}`}
               >
                 LOG OUT
               </button>
@@ -59,13 +63,13 @@ export default function NavBar() {
             <>
               <Link
                 href="/login"
-                className="rounded border border-border px-4 py-1.5 text-sm tracking-wide text-foreground transition-colors hover:border-accent"
+                className={`rounded border border-border px-4 py-1.5 text-sm text-foreground transition-colors hover:border-accent ${BUTTON_FONT}`}
               >
                 LOG IN
               </Link>
               <Link
                 href="/signup"
-                className="rounded bg-accent px-4 py-1.5 text-sm font-medium tracking-wide text-white transition-colors hover:bg-accent-hover"
+                className={`rounded bg-accent px-4 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover ${BUTTON_FONT}`}
               >
                 SIGN UP
               </Link>

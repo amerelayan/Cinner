@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PosterWall from "@/components/PosterWall";
+import FilmReelIcon from "@/components/FilmReelIcon";
 
 type FeaturedMovie = {
   tmdb_id: number;
@@ -48,9 +49,12 @@ export default function Home() {
       {/* pointer-events-none so this full-width wrapper doesn't block hover/click on
           posters positioned in the same vertical band, away from the actual form. */}
       <div className="relative z-20 flex w-full flex-1 flex-col items-center justify-center px-4 py-24 pointer-events-none">
-        <h1 className="font-display text-4xl tracking-[0.2em] text-foreground sm:text-5xl">
-          CINNER
-        </h1>
+        <div className="flex items-center gap-3">
+          <FilmReelIcon className="h-8 w-8 text-accent sm:h-10 sm:w-10" />
+          <h1 className="font-display text-4xl tracking-[0.2em] text-accent sm:text-5xl">
+            CINNER
+          </h1>
+        </div>
         <p className="mt-2 text-xs tracking-[0.35em] text-muted sm:text-sm">
           WATCH. RATE. REMEMBER.
         </p>
@@ -68,7 +72,7 @@ export default function Home() {
           />
           <button
             type="submit"
-            className="bg-accent px-6 py-3 text-sm font-medium tracking-wide text-white transition-colors hover:bg-accent-hover"
+            className="bg-accent px-6 py-3 font-display text-sm font-semibold tracking-[0.1em] text-white transition-colors hover:bg-accent-hover"
           >
             SEARCH
           </button>
@@ -81,7 +85,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="pointer-events-none relative z-20 w-full border-t border-border px-4 py-6 text-center text-xs tracking-wide text-muted">
+      <footer className="pointer-events-none relative z-20 w-full border-t border-border bg-background px-4 py-6 text-center text-xs tracking-wide text-muted">
         <p>BUILT FOR MOVIE LOVERS.</p>
         <p className="mt-1">© {new Date().getFullYear()} CINNER</p>
       </footer>

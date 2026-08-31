@@ -13,7 +13,8 @@ type FeaturedMovie = {
 
 type Slot = {
   top: string;
-  left: string;
+  left?: string;
+  right?: string;
   rotate: number;
   width: number;
   duration: number;
@@ -23,25 +24,34 @@ type Slot = {
   tier: "base" | "sm" | "lg";
 };
 
-// A hand-curated composition of poster positions around the central search area.
-// Randomness applies to which movies fill these slots, not to the layout itself,
-// so the homepage keeps a consistent, deliberate arrangement on every load.
+// A hand-curated, geometrically-checked composition: a row of 6 across the top,
+// a row of 5 across the bottom, and 2 posters down each side, sized and spaced so
+// no two slots' boxes touch or overlap (verified against actual pixel geometry,
+// including margin for each poster's rotation) at the reference layout width.
+// Randomness applies to which movies fill these slots, not to the layout itself.
 const SLOTS: Slot[] = [
-  { top: "8%", left: "5%", rotate: -9, width: 150, duration: 9, delay: 0, dx: 5, dy: -10, tier: "lg" },
-  { top: "14%", left: "20%", rotate: 6, width: 130, duration: 10.5, delay: 0.6, dx: -6, dy: 8, tier: "sm" },
-  { top: "5%", left: "40%", rotate: -4, width: 140, duration: 8.5, delay: 1.2, dx: 6, dy: -9, tier: "lg" },
-  { top: "9%", left: "60%", rotate: 5, width: 145, duration: 11, delay: 0.3, dx: -5, dy: 9, tier: "lg" },
-  { top: "7%", left: "80%", rotate: -7, width: 150, duration: 9.5, delay: 1.6, dx: 6, dy: -8, tier: "lg" },
-  { top: "16%", left: "4%", rotate: 8, width: 115, duration: 10, delay: 0.9, dx: -5, dy: 7, tier: "base" },
-  { top: "22%", left: "90%", rotate: -6, width: 120, duration: 9, delay: 1.9, dx: 5, dy: -7, tier: "base" },
-  { top: "34%", left: "2%", rotate: -5, width: 140, duration: 11.5, delay: 0.4, dx: -6, dy: 9, tier: "sm" },
-  { top: "36%", left: "93%", rotate: 6, width: 135, duration: 10, delay: 1.1, dx: 6, dy: -9, tier: "sm" },
-  { top: "58%", left: "3%", rotate: 7, width: 130, duration: 9.5, delay: 0.7, dx: -5, dy: 8, tier: "base" },
-  { top: "60%", left: "92%", rotate: -8, width: 130, duration: 10.5, delay: 1.4, dx: 6, dy: -8, tier: "base" },
-  { top: "78%", left: "8%", rotate: 5, width: 150, duration: 9, delay: 0.2, dx: -6, dy: -9, tier: "lg" },
-  { top: "80%", left: "28%", rotate: -6, width: 120, duration: 11, delay: 1.7, dx: 5, dy: 8, tier: "sm" },
-  { top: "76%", left: "68%", rotate: 6, width: 125, duration: 10, delay: 0.5, dx: -5, dy: -8, tier: "sm" },
-  { top: "79%", left: "87%", rotate: -5, width: 145, duration: 9.5, delay: 1.0, dx: 6, dy: 9, tier: "lg" },
+  // Top row
+  { top: "3%", left: "3%", width: 72, rotate: -8, duration: 8, delay: 0, dx: 10, dy: -16, tier: "base" },
+  { top: "3%", left: "19%", width: 100, rotate: 6, duration: 9, delay: 0.5, dx: -9, dy: 15, tier: "sm" },
+  { top: "3%", left: "35%", width: 100, rotate: -5, duration: 7.5, delay: 1, dx: 11, dy: -14, tier: "lg" },
+  { top: "3%", left: "53%", width: 100, rotate: 5, duration: 9.5, delay: 0.3, dx: -10, dy: 16, tier: "lg" },
+  { top: "3%", left: "69%", width: 100, rotate: -6, duration: 8, delay: 1.4, dx: 10, dy: -15, tier: "sm" },
+  { top: "3%", right: "3%", width: 72, rotate: 7, duration: 9, delay: 0.8, dx: -11, dy: 14, tier: "base" },
+
+  // Left column
+  { top: "28%", left: "1%", width: 80, rotate: -7, duration: 8.5, delay: 0.6, dx: 9, dy: -15, tier: "lg" },
+  { top: "48%", left: "1%", width: 80, rotate: 6, duration: 9.5, delay: 1.2, dx: -10, dy: 14, tier: "lg" },
+
+  // Right column
+  { top: "28%", right: "1%", width: 80, rotate: 7, duration: 8, delay: 0.2, dx: -9, dy: 15, tier: "lg" },
+  { top: "48%", right: "1%", width: 80, rotate: -6, duration: 9, delay: 1.5, dx: 10, dy: -14, tier: "lg" },
+
+  // Bottom row
+  { top: "68%", left: "3%", width: 72, rotate: 6, duration: 8.5, delay: 0.4, dx: -10, dy: 15, tier: "base" },
+  { top: "68%", left: "22%", width: 95, rotate: -5, duration: 9, delay: 1.1, dx: 11, dy: -14, tier: "sm" },
+  { top: "68%", left: "42%", width: 100, rotate: 6, duration: 7.5, delay: 0.7, dx: -9, dy: 16, tier: "lg" },
+  { top: "68%", left: "62%", width: 95, rotate: -6, duration: 9.5, delay: 0.9, dx: 10, dy: -15, tier: "sm" },
+  { top: "68%", right: "3%", width: 72, rotate: 5, duration: 8, delay: 1.3, dx: -11, dy: 14, tier: "base" },
 ];
 
 const TIER_CLASS: Record<Slot["tier"], string> = {
@@ -72,6 +82,7 @@ export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
             style={{
               top: slot.top,
               left: slot.left,
+              right: slot.right,
               width: slot.width,
               zIndex: isHovered ? 30 : 1,
             }}
@@ -85,7 +96,11 @@ export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
                   "--dx": `${slot.dx}px`,
                   "--dy": `${slot.dy}px`,
                   animationDuration: `${slot.duration}s`,
-                  animationDelay: `${slot.delay}s`,
+                  // Negative delay starts the animation immediately, offset partway
+                  // into its cycle, instead of waiting to start — a positive delay
+                  // combined with an inline animation-play-state can otherwise leave
+                  // the animation stuck indefinitely before it ever begins.
+                  animationDelay: `-${slot.delay}s`,
                   animationPlayState: isHovered ? "paused" : "running",
                 } as React.CSSProperties
               }
