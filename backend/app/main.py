@@ -12,6 +12,7 @@ from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, get_optional_user
 from app.featured import get_featured_pool, pick_random_featured
+from app.trending import get_trending_movies
 from app.tmdb import (
     VALID_GENRES,
     MovieNotFoundError,
@@ -76,11 +77,47 @@ async def movies_featured(count: int = 22):
     return {"movies": pick_random_featured(pool, count)}
 
 
+async def _attach_tracking_flags(movies: list[dict], user: dict | None) -> list[dict]:
+    if not user or not movies:
+        return [{**m, "watched": False, "in_watchlist": False} for m in movies]
+
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        ids = [m["tmdb_id"] for m in movies]
+        watched_rows = await conn.fetch(
+            "SELECT movie_id FROM public.watched WHERE user_id = $1 AND movie_id = ANY($2::int[])",
+            user["sub"],
+            ids,
+        )
+        watchlist_rows = await conn.fetch(
+            "SELECT movie_id FROM public.watchlist WHERE user_id = $1 AND movie_id = ANY($2::int[])",
+            user["sub"],
+            ids,
+        )
+    finally:
+        await conn.close()
+
+    watched_ids = {r["movie_id"] for r in watched_rows}
+    watchlist_ids = {r["movie_id"] for r in watchlist_rows}
+    return [
+        {**m, "watched": m["tmdb_id"] in watched_ids, "in_watchlist": m["tmdb_id"] in watchlist_ids}
+        for m in movies
+    ]
+
+
 @app.get("/movies/search")
-async def movies_search(q: str, page: int = 1):
+async def movies_search(q: str, page: int = 1, user: dict | None = Depends(get_optional_user)):
     if not q.strip():
         raise HTTPException(status_code=422, detail="Query parameter 'q' must not be empty")
-    return await search_movies(query=q, page=page)
+    data = await search_movies(query=q, page=page)
+    data["results"] = await _attach_tracking_flags(data["results"], user)
+    return data
+
+
+@app.get("/movies/trending")
+async def movies_trending(user: dict | None = Depends(get_optional_user)):
+    movies = await get_trending_movies()
+    return {"trending": await _attach_tracking_flags(movies, user)}
 
 
 @app.get("/movies/{tmdb_id}")

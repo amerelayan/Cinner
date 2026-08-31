@@ -83,6 +83,26 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
     }
 
 
+async def fetch_trending_movies() -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{TMDB_BASE_URL}/trending/movie/day",
+            headers=_headers(),
+        )
+    response.raise_for_status()
+    data = response.json()
+
+    return [
+        {
+            "tmdb_id": movie["id"],
+            "title": movie.get("title"),
+            "release_date": movie.get("release_date") or None,
+            "poster_path": movie.get("poster_path"),
+        }
+        for movie in data.get("results", [])
+    ]
+
+
 async def fetch_movie_basic(tmdb_id: int) -> dict:
     """Lightweight lookup (no credits) for display-only use cases like the homepage."""
     async with httpx.AsyncClient() as client:
