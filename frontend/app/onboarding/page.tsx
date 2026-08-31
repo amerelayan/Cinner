@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/supabaseClient";
+import FavoritesPicker from "@/components/FavoritesPicker";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -27,6 +28,20 @@ const AGE_OPTIONS: { value: string; label: string }[] = [
   { value: "25_plus_years", label: "25+ years" },
   { value: "no_preference", label: "No preference" },
 ];
+
+const CHIP =
+  "rounded-full border border-border px-4 py-2 text-sm text-foreground transition-colors hover:border-accent hover:text-accent";
+const CHIP_ACTIVE =
+  "rounded-full border border-accent bg-accent/10 px-4 py-2 text-sm text-accent transition-colors hover:bg-accent/20";
+const PRIMARY_BUTTON =
+  "rounded bg-accent px-6 py-2.5 font-display text-sm tracking-[0.05em] text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent";
+
+const STEP_TITLES: Record<number, string> = {
+  1: "Pick 5 favorite movies",
+  2: "What do you enjoy?",
+  3: "Which eras do you prefer?",
+  4: "One last thing",
+};
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -132,8 +147,6 @@ export default function OnboardingPage() {
     await reloadFavorites(token);
   }
 
-  const isFavorite = (tmdbId: number) => favorites.some((f) => f.tmdb_id === tmdbId);
-
   function toggleGenre(genre: string) {
     setSelectedGenres((prev) =>
       prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
@@ -190,111 +203,118 @@ export default function OnboardingPage() {
 
   if (step === null) {
     return (
-      <main style={{ padding: 24 }}>
-        <p>Loading...</p>
+      <main className="flex flex-1 items-center justify-center px-4">
+        <p className="text-muted">Loading...</p>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 480 }}>
-      <h1>Welcome to Cinner</h1>
-      {error && <p>{error}</p>}
+    <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-16 sm:px-6">
+      <div className="rounded border border-border bg-surface p-6 sm:p-10">
+        <div className="flex items-center justify-center gap-2">
+          {[1, 2, 3, 4].map((s) => (
+            <span
+              key={s}
+              className={`h-1.5 w-8 rounded-full transition-colors ${
+                s <= step ? "bg-accent" : "bg-border"
+              }`}
+            />
+          ))}
+        </div>
 
-      {step === 1 && (
-        <section>
-          <h2>Step 1: Choose your 5 favorite movies</h2>
-          <p>{favorites.length}/5</p>
+        <h1 className="mt-6 text-center font-display text-2xl text-foreground sm:text-3xl">
+          {STEP_TITLES[step]}
+        </h1>
 
-          <h3>Current Favorites</h3>
-          {favorites.length === 0 && <p>No favorites yet.</p>}
-          {favorites.map((f) => (
-            <div key={f.tmdb_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span>{f.title}</span>
-              <button onClick={() => handleRemoveFavorite(f.tmdb_id)}>Remove</button>
+        {error && <p className="mt-4 text-center text-sm text-accent">{error}</p>}
+
+        {step === 1 && (
+          <section className="mt-8">
+            <p className="mb-4 text-center text-sm text-muted">{favorites.length}/5 selected</p>
+            <FavoritesPicker
+              favorites={favorites}
+              query={query}
+              onQueryChange={setQuery}
+              results={results}
+              onAdd={handleAddFavorite}
+              onRemove={handleRemoveFavorite}
+            />
+            <div className="mt-8 flex justify-center">
+              <button
+                disabled={favorites.length !== 5}
+                onClick={() => setStep(2)}
+                className={PRIMARY_BUTTON}
+              >
+                Continue
+              </button>
             </div>
-          ))}
+          </section>
+        )}
 
-          <h3>Search</h3>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for a movie"
-          />
-          {results.map((r) => (
-            <div key={r.tmdb_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span>
-                {r.title} {r.release_date ? `(${r.release_date.slice(0, 4)})` : ""}
-              </span>
-              {isFavorite(r.tmdb_id) ? (
-                <span>Already a favorite</span>
-              ) : (
-                <button onClick={() => handleAddFavorite(r.tmdb_id)}>Add</button>
-              )}
+        {step === 2 && (
+          <section className="mt-8">
+            <p className="mb-5 text-center text-sm text-muted">Select at least one genre.</p>
+            <div className="flex flex-wrap justify-center gap-2.5">
+              {allGenres.map((genre) => (
+                <button
+                  key={genre}
+                  onClick={() => toggleGenre(genre)}
+                  className={selectedGenres.includes(genre) ? CHIP_ACTIVE : CHIP}
+                >
+                  {genre}
+                </button>
+              ))}
             </div>
-          ))}
+            <div className="mt-8 flex justify-center">
+              <button
+                disabled={selectedGenres.length === 0}
+                onClick={handleSubmitGenres}
+                className={PRIMARY_BUTTON}
+              >
+                Continue
+              </button>
+            </div>
+          </section>
+        )}
 
-          <p>
-            <button disabled={favorites.length !== 5} onClick={() => setStep(2)}>
-              Continue
-            </button>
-          </p>
-        </section>
-      )}
+        {step === 3 && (
+          <section className="mt-8">
+            <div className="flex flex-wrap justify-center gap-2.5">
+              {AGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAgeChoice(opt.value)}
+                  className={ageChoice === opt.value ? CHIP_ACTIVE : CHIP}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-8 flex justify-center">
+              <button disabled={!ageChoice} onClick={handleSubmitAge} className={PRIMARY_BUTTON}>
+                Continue
+              </button>
+            </div>
+          </section>
+        )}
 
-      {step === 2 && (
-        <section>
-          <h2>What movie genres do you enjoy?</h2>
-          <p>Select at least one.</p>
-          {allGenres.map((genre) => (
-            <label key={genre} style={{ display: "block" }}>
-              <input
-                type="checkbox"
-                checked={selectedGenres.includes(genre)}
-                onChange={() => toggleGenre(genre)}
-              />
-              {genre}
-            </label>
-          ))}
-          <p>
-            <button disabled={selectedGenres.length === 0} onClick={handleSubmitGenres}>
-              Continue
-            </button>
-          </p>
-        </section>
-      )}
-
-      {step === 3 && (
-        <section>
-          <h2>What kind of movie eras do you prefer?</h2>
-          {AGE_OPTIONS.map((opt) => (
-            <label key={opt.value} style={{ display: "block" }}>
-              <input
-                type="radio"
-                name="age-preference"
-                value={opt.value}
-                checked={ageChoice === opt.value}
-                onChange={() => setAgeChoice(opt.value)}
-              />
-              {opt.label}
-            </label>
-          ))}
-          <p>
-            <button disabled={!ageChoice} onClick={handleSubmitAge}>
-              Continue
-            </button>
-          </p>
-        </section>
-      )}
-
-      {step === 4 && (
-        <section>
-          <h2>Do you enjoy critically acclaimed classics (IMDb&apos;s Top 250)?</h2>
-          <button onClick={() => handleSubmitImdbPreference(true)}>Yes</button>
-          <button onClick={() => handleSubmitImdbPreference(false)}>No</button>
-        </section>
-      )}
+        {step === 4 && (
+          <section className="mt-8">
+            <p className="mb-6 text-center text-sm text-muted">
+              Do you enjoy critically acclaimed classics (IMDb&apos;s Top 250)?
+            </p>
+            <div className="flex justify-center gap-4">
+              <button onClick={() => handleSubmitImdbPreference(true)} className={CHIP}>
+                Yes
+              </button>
+              <button onClick={() => handleSubmitImdbPreference(false)} className={CHIP}>
+                No
+              </button>
+            </div>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

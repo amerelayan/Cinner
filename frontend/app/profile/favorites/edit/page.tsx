@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
+import FavoritesPicker from "@/components/FavoritesPicker";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -12,7 +14,7 @@ type SearchResult = {
 };
 
 export default function EditFavoritesPage() {
-  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[] | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [message, setMessage] = useState("");
@@ -85,49 +87,34 @@ export default function EditFavoritesPage() {
     await loadFavorites();
   }
 
-  const isFavorite = (tmdbId: number) => favorites.some((f) => f.tmdb_id === tmdbId);
-
   return (
-    <main style={{ padding: 24, maxWidth: 480 }}>
-      <h1>Edit Favorites</h1>
-      <p>
-        {favorites.length}/5
-      </p>
+    <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl text-foreground sm:text-3xl">Edit Favorites</h1>
+        <Link
+          href="/profile"
+          className="relative text-sm text-muted transition-colors hover:text-foreground after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 after:bg-accent after:transition-all after:duration-300 hover:after:w-full"
+        >
+          Back to Profile
+        </Link>
+      </div>
 
-      <section>
-        <h2>Current Favorites</h2>
-        {favorites.length === 0 && <p>No favorites yet.</p>}
-        {favorites.map((f) => (
-          <div key={f.tmdb_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span>{f.title}</span>
-            <button onClick={() => handleRemove(f.tmdb_id)}>Remove</button>
-          </div>
-        ))}
-      </section>
-
-      <section>
-        <h2>Search</h2>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a movie"
-        />
-        {results.map((r) => (
-          <div key={r.tmdb_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span>
-              {r.title} {r.release_date ? `(${r.release_date.slice(0, 4)})` : ""}
-            </span>
-            {isFavorite(r.tmdb_id) ? (
-              <span>Already a favorite</span>
-            ) : (
-              <button onClick={() => handleAdd(r.tmdb_id)}>Add</button>
-            )}
-          </div>
-        ))}
-      </section>
-
-      {message && <p>{message}</p>}
+      {favorites === null ? (
+        <p className="mt-6 text-sm text-muted">{message || "Loading..."}</p>
+      ) : (
+        <div className="mt-8 rounded border border-border bg-surface p-6 sm:p-8">
+          <p className="mb-4 text-center text-sm text-muted">{favorites.length}/5 selected</p>
+          <FavoritesPicker
+            favorites={favorites}
+            query={query}
+            onQueryChange={setQuery}
+            results={results}
+            onAdd={handleAdd}
+            onRemove={handleRemove}
+          />
+          {message && <p className="mt-4 text-center text-sm text-accent">{message}</p>}
+        </div>
+      )}
     </main>
   );
 }
