@@ -61,8 +61,10 @@ export default function MovieDetailPage() {
   }, [tmdbId]);
 
   async function handleRate(rating: number) {
-    if (!token) return;
+    if (!token || !movie) return;
     setMessage("");
+    const previous = movie.your_rating;
+    setMovie({ ...movie, your_rating: rating });
     const res = await fetch("http://localhost:8000/ratings", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -71,53 +73,69 @@ export default function MovieDetailPage() {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setMessage(body.detail ?? "Failed to submit rating.");
+      setMovie((prev) => (prev ? { ...prev, your_rating: previous } : prev));
       return;
     }
     await load();
   }
 
   async function handleClearRating() {
-    if (!token) return;
+    if (!token || !movie) return;
     setMessage("");
-    await fetch(`http://localhost:8000/ratings/${tmdbId}`, {
+    const previous = movie.your_rating;
+    setMovie({ ...movie, your_rating: null });
+    const res = await fetch(`http://localhost:8000/ratings/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!res.ok) {
+      setMessage("Failed to clear rating.");
+      setMovie((prev) => (prev ? { ...prev, your_rating: previous } : prev));
+      return;
+    }
     await load();
   }
 
   async function toggleWatched() {
     if (!token || !movie) return;
-    if (movie.watched) {
-      await fetch(`http://localhost:8000/watched/${tmdbId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } else {
-      await fetch("http://localhost:8000/watched", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
-      });
+    setMessage("");
+    const wasWatched = movie.watched;
+    setMovie({ ...movie, watched: !wasWatched });
+    const res = wasWatched
+      ? await fetch(`http://localhost:8000/watched/${tmdbId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      : await fetch("http://localhost:8000/watched", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
+        });
+    if (!res.ok) {
+      setMessage("Failed to update watched status.");
+      setMovie((prev) => (prev ? { ...prev, watched: wasWatched } : prev));
     }
-    await load();
   }
 
   async function toggleWatchlist() {
     if (!token || !movie) return;
-    if (movie.in_watchlist) {
-      await fetch(`http://localhost:8000/watchlist/${tmdbId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } else {
-      await fetch("http://localhost:8000/watchlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
-      });
+    setMessage("");
+    const wasInWatchlist = movie.in_watchlist;
+    setMovie({ ...movie, in_watchlist: !wasInWatchlist });
+    const res = wasInWatchlist
+      ? await fetch(`http://localhost:8000/watchlist/${tmdbId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      : await fetch("http://localhost:8000/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
+        });
+    if (!res.ok) {
+      setMessage("Failed to update watchlist.");
+      setMovie((prev) => (prev ? { ...prev, in_watchlist: wasInWatchlist } : prev));
     }
-    await load();
   }
 
   if (error) {
@@ -201,15 +219,7 @@ export default function MovieDetailPage() {
           <div className="mt-8 border-t border-border pt-6">
             {token ? (
               <div className="flex flex-wrap items-center gap-5">
-                <StarRating value={movie.your_rating} onRate={handleRate} />
-                {movie.your_rating !== null && (
-                  <button
-                    onClick={handleClearRating}
-                    className="text-xs text-muted transition-colors hover:text-accent"
-                  >
-                    Clear
-                  </button>
-                )}
+                <StarRating value={movie.your_rating} onRate={handleRate} onClear={handleClearRating} />
 
                 <TrackButton
                   icon="eye"
