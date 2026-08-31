@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type SearchResult = {
@@ -13,7 +14,8 @@ type SearchResult = {
 const POSTER_BASE = "https://image.tmdb.org/t/p/w200";
 
 export default function SearchPage() {
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [results, setResults] = useState<SearchResult[]>([]);
 
   useEffect(() => {

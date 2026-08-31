@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, get_optional_user
+from app.featured import get_featured_pool, pick_random_featured
 from app.tmdb import (
     VALID_GENRES,
     MovieNotFoundError,
@@ -67,6 +68,12 @@ async def tmdb_health():
 
     data = response.json()
     return {"tmdb": "connected", "title": data.get("title"), "release_date": data.get("release_date")}
+
+
+@app.get("/movies/featured")
+async def movies_featured(count: int = 15):
+    pool = await get_featured_pool()
+    return {"movies": pick_random_featured(pool, count)}
 
 
 @app.get("/movies/search")

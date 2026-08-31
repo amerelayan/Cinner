@@ -83,6 +83,27 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
     }
 
 
+async def fetch_movie_basic(tmdb_id: int) -> dict:
+    """Lightweight lookup (no credits) for display-only use cases like the homepage."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{TMDB_BASE_URL}/movie/{tmdb_id}",
+            headers=_headers(),
+        )
+    if response.status_code == 404:
+        raise MovieNotFoundError(f"TMDB movie {tmdb_id} not found")
+    response.raise_for_status()
+    data = response.json()
+
+    return {
+        "tmdb_id": data["id"],
+        "title": data.get("title"),
+        "release_date": data.get("release_date") or None,
+        "poster_path": data.get("poster_path"),
+        "tmdb_rating": data.get("vote_average") or None,
+    }
+
+
 async def ensure_movie_cached(conn, tmdb_id: int) -> None:
     exists = await conn.fetchval("SELECT 1 FROM public.movies WHERE id = $1", tmdb_id)
     if exists:
