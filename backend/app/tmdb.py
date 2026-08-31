@@ -83,12 +83,9 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
     }
 
 
-async def fetch_trending_movies() -> list[dict]:
+async def _fetch_movie_list(path: str) -> list[dict]:
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{TMDB_BASE_URL}/trending/movie/day",
-            headers=_headers(),
-        )
+        response = await client.get(f"{TMDB_BASE_URL}{path}", headers=_headers())
     response.raise_for_status()
     data = response.json()
 
@@ -101,6 +98,18 @@ async def fetch_trending_movies() -> list[dict]:
         }
         for movie in data.get("results", [])
     ]
+
+
+async def fetch_trending_movies() -> list[dict]:
+    return await _fetch_movie_list("/trending/movie/day")
+
+
+async def fetch_top_rated_movies() -> list[dict]:
+    return await _fetch_movie_list("/movie/top_rated")
+
+
+async def fetch_popular_movies() -> list[dict]:
+    return await _fetch_movie_list("/movie/popular")
 
 
 async def fetch_movie_basic(tmdb_id: int) -> dict:

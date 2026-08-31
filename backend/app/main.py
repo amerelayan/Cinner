@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, get_optional_user
 from app.featured import get_featured_pool, pick_random_featured
-from app.trending import get_trending_movies
+from app.movie_lists import get_popular_movies, get_top_rated_movies, get_trending_movies
 from app.tmdb import (
     VALID_GENRES,
     MovieNotFoundError,
@@ -28,7 +29,18 @@ VALID_AGE_PREFERENCES = [
 DATABASE_URL = os.environ.get("DATABASE_URL")
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
 
-app = FastAPI(title="Cinner API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # A pooled connection is reused instantly; opening a fresh TCP+TLS connection to the
+    # remote Supabase Postgres on every single request (as this app used to do) added
+    # multiple seconds of latency to endpoints like live search that run on every keystroke.
+    app.state.pool = await asyncpg.create_pool(dsn=DATABASE_URL, min_size=1, max_size=10)
+    yield
+    await app.state.pool.close()
+
+
+app = FastAPI(title="Cinner API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,11 +57,8 @@ def health_check():
 
 @app.get("/db-health")
 async def db_health():
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         result = await conn.fetchval("SELECT 1")
-    finally:
-        await conn.close()
     return {"database": "connected", "result": result}
 
 
@@ -81,8 +90,7 @@ async def _attach_tracking_flags(movies: list[dict], user: dict | None) -> list[
     if not user or not movies:
         return [{**m, "watched": False, "in_watchlist": False} for m in movies]
 
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         ids = [m["tmdb_id"] for m in movies]
         watched_rows = await conn.fetch(
             "SELECT movie_id FROM public.watched WHERE user_id = $1 AND movie_id = ANY($2::int[])",
@@ -94,8 +102,6 @@ async def _attach_tracking_flags(movies: list[dict], user: dict | None) -> list[
             user["sub"],
             ids,
         )
-    finally:
-        await conn.close()
 
     watched_ids = {r["movie_id"] for r in watched_rows}
     watchlist_ids = {r["movie_id"] for r in watchlist_rows}
@@ -120,10 +126,21 @@ async def movies_trending(user: dict | None = Depends(get_optional_user)):
     return {"trending": await _attach_tracking_flags(movies, user)}
 
 
+@app.get("/movies/top-rated")
+async def movies_top_rated(user: dict | None = Depends(get_optional_user)):
+    movies = await get_top_rated_movies()
+    return {"top_rated": await _attach_tracking_flags(movies, user)}
+
+
+@app.get("/movies/popular")
+async def movies_popular(user: dict | None = Depends(get_optional_user)):
+    movies = await get_popular_movies()
+    return {"popular": await _attach_tracking_flags(movies, user)}
+
+
 @app.get("/movies/{tmdb_id}")
 async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT id AS tmdb_id, title, release_date, poster_path, synopsis, director,
@@ -201,8 +218,6 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
         movie["watched"] = watched
         movie["in_watchlist"] = in_watchlist
         return movie
-    finally:
-        await conn.close()
 
 
 async def cache_movie_or_404(conn, tmdb_id: int) -> None:
@@ -217,8 +232,7 @@ async def cache_movie_or_404(conn, tmdb_id: int) -> None:
 async def _add_movie_membership(
     table: str, user_id: str, tmdb_id: int, max_count: int | None = None
 ) -> int:
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         async with conn.transaction():
             await cache_movie_or_404(conn, tmdb_id)
 
@@ -246,20 +260,15 @@ async def _add_movie_membership(
                 f"SELECT count(*) FROM public.{table} WHERE user_id = $1", user_id
             )
         return new_count
-    finally:
-        await conn.close()
 
 
 async def _remove_movie_membership(table: str, user_id: str, tmdb_id: int) -> None:
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             f"DELETE FROM public.{table} WHERE user_id = $1 AND movie_id = $2",
             user_id,
             tmdb_id,
         )
-    finally:
-        await conn.close()
 
 
 class MovieAction(BaseModel):
@@ -268,8 +277,7 @@ class MovieAction(BaseModel):
 
 @app.get("/favorites")
 async def get_favorites(user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT m.id AS tmdb_id, m.title, m.poster_path
@@ -280,8 +288,6 @@ async def get_favorites(user: dict = Depends(get_current_user)):
             """,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"favorites": [dict(row) for row in rows]}
 
 
@@ -298,8 +304,7 @@ async def remove_favorite(tmdb_id: int, user: dict = Depends(get_current_user)):
 
 @app.get("/watched")
 async def get_watched(user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT m.id AS tmdb_id, m.title, m.release_date, m.poster_path
@@ -310,8 +315,6 @@ async def get_watched(user: dict = Depends(get_current_user)):
             """,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"watched": [dict(row) for row in rows]}
 
 
@@ -328,8 +331,7 @@ async def remove_watched(tmdb_id: int, user: dict = Depends(get_current_user)):
 
 @app.get("/watchlist")
 async def get_watchlist(user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT m.id AS tmdb_id, m.title, m.release_date, m.poster_path
@@ -340,8 +342,6 @@ async def get_watchlist(user: dict = Depends(get_current_user)):
             """,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"watchlist": [dict(row) for row in rows]}
 
 
@@ -372,8 +372,7 @@ class RatingCreate(BaseModel):
 
 @app.post("/ratings")
 async def upsert_rating(payload: RatingCreate, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         async with conn.transaction():
             await cache_movie_or_404(conn, payload.tmdb_id)
             await conn.execute(
@@ -387,22 +386,17 @@ async def upsert_rating(payload: RatingCreate, user: dict = Depends(get_current_
                 payload.tmdb_id,
                 payload.rating,
             )
-    finally:
-        await conn.close()
     return {"tmdb_id": payload.tmdb_id, "rating": payload.rating}
 
 
 @app.delete("/ratings/{tmdb_id}", status_code=204)
 async def remove_rating(tmdb_id: int, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "DELETE FROM public.ratings WHERE user_id = $1 AND movie_id = $2",
             user["sub"],
             tmdb_id,
         )
-    finally:
-        await conn.close()
 
 
 class ProfileCreate(BaseModel):
@@ -412,8 +406,7 @@ class ProfileCreate(BaseModel):
 @app.post("/profile", status_code=201)
 async def create_profile(payload: ProfileCreate, user: dict = Depends(get_current_user)):
     user_id = user["sub"]
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         try:
             await conn.execute(
                 "INSERT INTO public.profiles (id, username) VALUES ($1, $2)",
@@ -427,8 +420,6 @@ async def create_profile(payload: ProfileCreate, user: dict = Depends(get_curren
                 status_code=422,
                 detail="Username must be 3-20 characters, using only letters, numbers, and underscores",
             )
-    finally:
-        await conn.close()
     return {"id": user_id, "username": payload.username}
 
 
@@ -439,8 +430,7 @@ def get_genres():
 
 @app.get("/profile")
 async def get_profile(user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT username, profile_picture_url, location, preferred_genres,
@@ -457,8 +447,6 @@ async def get_profile(user: dict = Depends(get_current_user)):
         watchlist_count = await conn.fetchval(
             "SELECT count(*) FROM public.watchlist WHERE user_id = $1", user["sub"]
         )
-    finally:
-        await conn.close()
     return {**dict(row), "watched_count": watched_count, "watchlist_count": watchlist_count}
 
 
@@ -468,15 +456,12 @@ class LocationUpdate(BaseModel):
 
 @app.post("/profile/location")
 async def update_location(payload: LocationUpdate, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "UPDATE public.profiles SET location = $1, updated_at = now() WHERE id = $2",
             payload.location,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"location": payload.location}
 
 
@@ -486,15 +471,12 @@ class PictureUpdate(BaseModel):
 
 @app.post("/profile/picture")
 async def update_picture(payload: PictureUpdate, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "UPDATE public.profiles SET profile_picture_url = $1, updated_at = now() WHERE id = $2",
             payload.profile_picture_url,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"profile_picture_url": payload.profile_picture_url}
 
 
@@ -514,15 +496,12 @@ class GenresUpdate(BaseModel):
 
 @app.post("/profile/genres")
 async def update_genres(payload: GenresUpdate, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "UPDATE public.profiles SET preferred_genres = $1, updated_at = now() WHERE id = $2",
             payload.genres,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"preferred_genres": payload.genres}
 
 
@@ -539,15 +518,12 @@ class AgePreferenceUpdate(BaseModel):
 
 @app.post("/profile/age-preference")
 async def update_age_preference(payload: AgePreferenceUpdate, user: dict = Depends(get_current_user)):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "UPDATE public.profiles SET preferred_movie_age = $1, updated_at = now() WHERE id = $2",
             payload.age_preference,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"preferred_movie_age": payload.age_preference}
 
 
@@ -559,13 +535,10 @@ class ImdbTop250PreferenceUpdate(BaseModel):
 async def update_imdb_top_250_preference(
     payload: ImdbTop250PreferenceUpdate, user: dict = Depends(get_current_user)
 ):
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
-    try:
+    async with app.state.pool.acquire() as conn:
         await conn.execute(
             "UPDATE public.profiles SET prefers_imdb_top_250 = $1, updated_at = now() WHERE id = $2",
             payload.prefers_imdb_top_250,
             user["sub"],
         )
-    finally:
-        await conn.close()
     return {"prefers_imdb_top_250": payload.prefers_imdb_top_250}

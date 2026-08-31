@@ -16,6 +16,23 @@ type Movie = {
 };
 
 const POSTER_BASE = "https://image.tmdb.org/t/p/w300";
+const PAGE_SIZE = 5;
+
+function ArrowIcon({ direction }: { direction: "left" | "right" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={direction === "left" ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
+    </svg>
+  );
+}
 
 function MovieCard({
   movie,
@@ -77,13 +94,77 @@ function MovieCard({
   );
 }
 
+function MovieRow({
+  title,
+  movies,
+  loading,
+  showTracking,
+  onToggleWatched,
+  onToggleWatchlist,
+}: {
+  title: string;
+  movies: Movie[];
+  loading: boolean;
+  showTracking: boolean;
+  onToggleWatched: (movie: Movie) => void;
+  onToggleWatchlist: (movie: Movie) => void;
+}) {
+  const [page, setPage] = useState(0);
+  const maxPage = Math.max(0, Math.ceil(movies.length / PAGE_SIZE) - 1);
+  const visible = movies.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  return (
+    <section className="mt-12">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg tracking-wide text-foreground">{title}</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            aria-label={`Previous ${title}`}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-30 disabled:hover:border-border disabled:hover:text-muted"
+          >
+            <ArrowIcon direction="left" />
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+            disabled={page >= maxPage}
+            aria-label={`Next ${title}`}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-30 disabled:hover:border-border disabled:hover:text-muted"
+          >
+            <ArrowIcon direction="right" />
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="mt-5 text-sm text-muted">Loading...</p>
+      ) : (
+        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+          {visible.map((movie) => (
+            <MovieCard
+              key={movie.tmdb_id}
+              movie={movie}
+              showTracking={showTracking}
+              onToggleWatched={onToggleWatched}
+              onToggleWatchlist={onToggleWatchlist}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function SearchPage() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [token, setToken] = useState<string | null>(null);
   const [trending, setTrending] = useState<Movie[]>([]);
+  const [topRated, setTopRated] = useState<Movie[]>([]);
+  const [popular, setPopular] = useState<Movie[]>([]);
   const [results, setResults] = useState<Movie[]>([]);
-  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [loadingLists, setLoadingLists] = useState(true);
 
   useEffect(() => {
     async function init() {
@@ -91,12 +172,16 @@ export default function SearchPage() {
       setToken(t);
       const headers: Record<string, string> = {};
       if (t) headers.Authorization = `Bearer ${t}`;
-      const res = await fetch("http://localhost:8000/movies/trending", { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setTrending(data.trending);
-      }
-      setLoadingTrending(false);
+
+      const [trendingRes, topRatedRes, popularRes] = await Promise.all([
+        fetch("http://localhost:8000/movies/trending", { headers }),
+        fetch("http://localhost:8000/movies/top-rated", { headers }),
+        fetch("http://localhost:8000/movies/popular", { headers }),
+      ]);
+      if (trendingRes.ok) setTrending((await trendingRes.json()).trending);
+      if (topRatedRes.ok) setTopRated((await topRatedRes.json()).top_rated);
+      if (popularRes.ok) setPopular((await popularRes.json()).popular);
+      setLoadingLists(false);
     }
     init();
   }, []);
@@ -121,8 +206,12 @@ export default function SearchPage() {
   }, [query, token]);
 
   function patchMovie(tmdbId: number, patch: Partial<Movie>) {
-    setTrending((prev) => prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, ...patch } : m)));
-    setResults((prev) => prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, ...patch } : m)));
+    const updater = (prev: Movie[]) =>
+      prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, ...patch } : m));
+    setTrending(updater);
+    setTopRated(updater);
+    setPopular(updater);
+    setResults(updater);
   }
 
   async function toggleWatched(movie: Movie) {
@@ -160,7 +249,6 @@ export default function SearchPage() {
   }
 
   const isSearching = query.trim().length > 0;
-  const shown = isSearching ? results : trending;
 
   return (
     <main className="flex flex-1 flex-col items-center px-4 pb-16 pt-16 sm:pt-20">
@@ -179,27 +267,53 @@ export default function SearchPage() {
         </form>
       </div>
 
-      <section className="mt-12 w-full max-w-6xl">
-        <h2 className="font-display text-lg tracking-wide text-foreground">
-          {isSearching ? `Results for "${query}"` : "Trending Today"}
-        </h2>
-
-        {!isSearching && loadingTrending && (
-          <p className="mt-5 text-sm text-muted">Loading...</p>
-        )}
-
-        <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-          {shown.map((movie) => (
-            <MovieCard
-              key={movie.tmdb_id}
-              movie={movie}
+      <div className="w-full max-w-6xl">
+        {isSearching ? (
+          <section className="mt-12">
+            <h2 className="font-display text-lg tracking-wide text-foreground">
+              Results for &quot;{query}&quot;
+            </h2>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+              {results.map((movie) => (
+                <MovieCard
+                  key={movie.tmdb_id}
+                  movie={movie}
+                  showTracking={!!token}
+                  onToggleWatched={toggleWatched}
+                  onToggleWatchlist={toggleWatchlist}
+                />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <>
+            <MovieRow
+              title="Trending Today"
+              movies={trending}
+              loading={loadingLists}
               showTracking={!!token}
               onToggleWatched={toggleWatched}
               onToggleWatchlist={toggleWatchlist}
             />
-          ))}
-        </div>
-      </section>
+            <MovieRow
+              title="Highest Rated"
+              movies={topRated}
+              loading={loadingLists}
+              showTracking={!!token}
+              onToggleWatched={toggleWatched}
+              onToggleWatchlist={toggleWatchlist}
+            />
+            <MovieRow
+              title="Most Popular"
+              movies={popular}
+              loading={loadingLists}
+              showTracking={!!token}
+              onToggleWatched={toggleWatched}
+              onToggleWatchlist={toggleWatchlist}
+            />
+          </>
+        )}
+      </div>
     </main>
   );
 }
