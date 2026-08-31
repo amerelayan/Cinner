@@ -10,8 +10,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from app.auth import get_current_user
-from app.tmdb import MovieNotFoundError, ensure_movie_cached, search_movies
+from app.auth import get_current_user, get_optional_user
+from app.tmdb import MovieNotFoundError, ensure_movie_cached, fetch_movie_details, search_movies
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
@@ -64,6 +64,91 @@ async def movies_search(q: str, page: int = 1):
     if not q.strip():
         raise HTTPException(status_code=422, detail="Query parameter 'q' must not be empty")
     return await search_movies(query=q, page=page)
+
+
+@app.get("/movies/{tmdb_id}")
+async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT id AS tmdb_id, title, release_date, poster_path, synopsis, director,
+                   genres, main_cast, language, runtime_minutes,
+                   imdb_rating, rotten_tomatoes_rating, letterboxd_rating
+            FROM public.movies WHERE id = $1
+            """,
+            tmdb_id,
+        )
+
+        if row is None:
+            try:
+                details = await fetch_movie_details(tmdb_id)
+            except MovieNotFoundError:
+                raise HTTPException(status_code=404, detail="Movie not found")
+            except (httpx.HTTPStatusError, httpx.RequestError):
+                raise HTTPException(status_code=502, detail="TMDB is currently unavailable")
+
+            return {
+                "tmdb_id": details["id"],
+                "title": details["title"],
+                "release_date": details["release_date"],
+                "poster_path": details["poster_path"],
+                "synopsis": details["synopsis"],
+                "director": details["director"],
+                "genres": details["genres"],
+                "main_cast": details["main_cast"],
+                "language": details["language"],
+                "runtime_minutes": details["runtime_minutes"],
+                "imdb_rating": None,
+                "rotten_tomatoes_rating": None,
+                "letterboxd_rating": None,
+                "cinner_average_rating": None,
+                "cinner_ratings_count": 0,
+                "your_rating": None,
+                "watched": False,
+                "in_watchlist": False,
+            }
+
+        movie = dict(row)
+
+        agg = await conn.fetchrow(
+            "SELECT avg(rating) AS avg_rating, count(*) AS cnt FROM public.ratings WHERE movie_id = $1",
+            tmdb_id,
+        )
+        movie["cinner_average_rating"] = float(agg["avg_rating"]) if agg["avg_rating"] is not None else None
+        movie["cinner_ratings_count"] = agg["cnt"]
+
+        your_rating = None
+        watched = False
+        in_watchlist = False
+        if user:
+            user_id = user["sub"]
+            your_rating_value = await conn.fetchval(
+                "SELECT rating FROM public.ratings WHERE user_id = $1 AND movie_id = $2",
+                user_id,
+                tmdb_id,
+            )
+            your_rating = float(your_rating_value) if your_rating_value is not None else None
+            watched = bool(
+                await conn.fetchval(
+                    "SELECT 1 FROM public.watched WHERE user_id = $1 AND movie_id = $2",
+                    user_id,
+                    tmdb_id,
+                )
+            )
+            in_watchlist = bool(
+                await conn.fetchval(
+                    "SELECT 1 FROM public.watchlist WHERE user_id = $1 AND movie_id = $2",
+                    user_id,
+                    tmdb_id,
+                )
+            )
+        movie["your_rating"] = your_rating
+        movie["watched"] = watched
+        movie["in_watchlist"] = in_watchlist
+        return movie
+    finally:
+        await conn.close()
 
 
 async def cache_movie_or_404(conn, tmdb_id: int) -> None:
