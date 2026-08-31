@@ -97,14 +97,6 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function reloadFavorites(t: string) {
-    const res = await fetch("http://localhost:8000/favorites", {
-      headers: { Authorization: `Bearer ${t}` },
-    });
-    const data = await res.json();
-    setFavorites(data.favorites);
-  }
-
   useEffect(() => {
     if (step !== 1) return;
     if (!query.trim()) {
@@ -124,27 +116,37 @@ export default function OnboardingPage() {
 
   async function handleRemoveFavorite(tmdbId: number) {
     if (!token) return;
-    await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
+    const removed = favorites.find((f) => f.tmdb_id === tmdbId);
+    setFavorites((prev) => prev.filter((f) => f.tmdb_id !== tmdbId));
+    const res = await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    await reloadFavorites(token);
+    if (!res.ok && removed) {
+      setError("Failed to remove favorite.");
+      setFavorites((prev) => [...prev, removed]);
+    }
   }
 
-  async function handleAddFavorite(tmdbId: number) {
+  async function handleAddFavorite(movie: SearchResult) {
     if (!token) return;
     setError("");
+    setQuery("");
+    setResults([]);
+    setFavorites((prev) => [
+      ...prev,
+      { tmdb_id: movie.tmdb_id, title: movie.title, poster_path: movie.poster_path },
+    ]);
     const res = await fetch("http://localhost:8000/favorites", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ tmdb_id: tmdbId }),
+      body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.detail ?? "Failed to add favorite.");
-      return;
+      setFavorites((prev) => prev.filter((f) => f.tmdb_id !== movie.tmdb_id));
     }
-    await reloadFavorites(token);
   }
 
   function toggleGenre(genre: string) {

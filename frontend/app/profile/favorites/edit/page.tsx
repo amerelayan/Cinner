@@ -60,31 +60,42 @@ export default function EditFavoritesPage() {
     setMessage("");
     const token = await getAccessToken();
     if (!token) return;
-    await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
+    const removed = favorites?.find((f) => f.tmdb_id === tmdbId);
+    setFavorites((prev) => (prev ? prev.filter((f) => f.tmdb_id !== tmdbId) : prev));
+    const res = await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    await loadFavorites();
+    if (!res.ok && removed) {
+      setMessage("Failed to remove favorite.");
+      setFavorites((prev) => (prev ? [...prev, removed] : prev));
+    }
   }
 
-  async function handleAdd(tmdbId: number) {
+  async function handleAdd(movie: SearchResult) {
     setMessage("");
+    setQuery("");
+    setResults([]);
     const token = await getAccessToken();
     if (!token) return;
+    setFavorites((prev) =>
+      prev
+        ? [...prev, { tmdb_id: movie.tmdb_id, title: movie.title, poster_path: movie.poster_path }]
+        : prev
+    );
     const res = await fetch("http://localhost:8000/favorites", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ tmdb_id: tmdbId }),
+      body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setMessage(body.detail ?? "Failed to add favorite.");
-      return;
+      setFavorites((prev) => (prev ? prev.filter((f) => f.tmdb_id !== movie.tmdb_id) : prev));
     }
-    await loadFavorites();
   }
 
   return (

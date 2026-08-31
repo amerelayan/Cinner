@@ -40,7 +40,7 @@ export default function FavoritesPicker({
   query: string;
   onQueryChange: (query: string) => void;
   results: SearchResult[];
-  onAdd: (tmdbId: number) => void;
+  onAdd: (movie: SearchResult) => void;
   onRemove: (tmdbId: number) => void;
 }) {
   const isFavorite = (tmdbId: number) => favorites.some((f) => f.tmdb_id === tmdbId);
@@ -67,7 +67,7 @@ export default function FavoritesPicker({
                   key={r.tmdb_id}
                   type="button"
                   disabled={already}
-                  onClick={() => onAdd(r.tmdb_id)}
+                  onClick={() => onAdd(r)}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
                 >
                   {r.poster_path ? (
