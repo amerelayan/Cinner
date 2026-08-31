@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import FilmReelIcon from "@/components/FilmReelIcon";
 
-const BUTTON_FONT = "font-display font-semibold tracking-[0.1em]";
+const BUTTON_FONT = "font-display tracking-[0.1em]";
+const NAV_LINK =
+  "relative pb-1 transition-colors hover:text-foreground after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-0 after:bg-accent after:transition-all after:duration-300 hover:after:w-full";
 
 export default function NavBar() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
@@ -32,11 +34,11 @@ export default function NavBar() {
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm tracking-wide text-muted sm:flex">
-          <Link href="/search" className="transition-colors hover:text-foreground">
+          <Link href="/search" className={NAV_LINK}>
             MOVIES
           </Link>
           {loggedIn && (
-            <Link href="/profile" className="transition-colors hover:text-foreground">
+            <Link href="/profile" className={NAV_LINK}>
               PROFILE
             </Link>
           )}
@@ -47,7 +49,7 @@ export default function NavBar() {
             <>
               <Link
                 href="/profile"
-                className="text-sm text-muted transition-colors hover:text-foreground sm:hidden"
+                className={`text-sm text-muted sm:hidden ${NAV_LINK}`}
               >
                 PROFILE
               </Link>

@@ -42,33 +42,41 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 320 }}>
-      <h1>Log in</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>Email</label>
-          <br />
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label>Password</label>
-          <br />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <br />
-        <button type="submit">Log in</button>
-      </form>
-      {message && <p>{message}</p>}
+    <main className="flex flex-1 items-center justify-center px-4 py-16">
+      <div className="w-full max-w-sm rounded border border-border bg-surface p-8">
+        <h1 className="font-display text-2xl text-foreground">Log in</h1>
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full rounded bg-accent py-2.5 font-display tracking-[0.05em] text-white transition-colors hover:bg-accent-hover"
+          >
+            Log in
+          </button>
+        </form>
+        {message && <p className="mt-4 text-sm text-accent">{message}</p>}
+      </div>
     </main>
   );
 }

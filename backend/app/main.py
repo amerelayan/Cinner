@@ -71,7 +71,7 @@ async def tmdb_health():
 
 
 @app.get("/movies/featured")
-async def movies_featured(count: int = 15):
+async def movies_featured(count: int = 22):
     pool = await get_featured_pool()
     return {"movies": pick_random_featured(pool, count)}
 

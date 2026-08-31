@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
+import RatingBadge from "@/components/RatingBadge";
 
 type MovieDetail = {
   tmdb_id: number;
@@ -26,8 +27,13 @@ type MovieDetail = {
   in_watchlist: boolean;
 };
 
-const POSTER_BASE = "https://image.tmdb.org/t/p/w300";
+const POSTER_BASE = "https://image.tmdb.org/t/p/w400";
 const RATING_OPTIONS = Array.from({ length: 19 }, (_, i) => 1 + i * 0.5);
+
+const ACTION_BUTTON =
+  "rounded border border-border px-4 py-2 text-sm tracking-wide text-foreground transition-colors hover:border-accent";
+const ACTION_BUTTON_ACTIVE =
+  "rounded border border-accent bg-accent/10 px-4 py-2 text-sm tracking-wide text-accent transition-colors hover:bg-accent/20";
 
 export default function MovieDetailPage() {
   const params = useParams<{ id: string }>();
@@ -122,96 +128,133 @@ export default function MovieDetailPage() {
 
   if (error) {
     return (
-      <main style={{ padding: 24 }}>
-        <p>{error}</p>
+      <main className="flex flex-1 items-center justify-center px-4">
+        <p className="text-muted">{error}</p>
       </main>
     );
   }
 
   if (!movie) {
     return (
-      <main style={{ padding: 24 }}>
-        <p>Loading...</p>
+      <main className="flex flex-1 items-center justify-center px-4">
+        <p className="text-muted">Loading...</p>
       </main>
     );
   }
 
+  const year = movie.release_date ? movie.release_date.slice(0, 4) : null;
+
   return (
-    <main style={{ padding: 24, maxWidth: 600 }}>
-      <div style={{ display: "flex", gap: 24 }}>
-        {movie.poster_path ? (
-          <img
-            src={`${POSTER_BASE}${movie.poster_path}`}
-            alt={movie.title}
-            style={{ width: 200 }}
-          />
-        ) : (
-          <div style={{ width: 200, height: 300, background: "#ccc" }} />
-        )}
-        <div>
-          <h1>
-            {movie.title}
-            {movie.release_date ? ` (${movie.release_date.slice(0, 4)})` : ""}
-          </h1>
-          <p>IMDb: {movie.imdb_rating ?? "—"}</p>
-          <p>Rotten Tomatoes: {movie.rotten_tomatoes_rating ?? "—"}</p>
-          <p>Letterboxd: {movie.letterboxd_rating ?? "—"}</p>
-          <p>
-            Cinner rating: {movie.cinner_average_rating ?? "—"}
-            {movie.cinner_ratings_count > 0 ? ` (${movie.cinner_ratings_count} ratings)` : ""}
-          </p>
-          <p>{movie.synopsis}</p>
-          <p>Director: {movie.director ?? "—"}</p>
-          <p>Cast: {movie.main_cast && movie.main_cast.length > 0 ? movie.main_cast.join(", ") : "—"}</p>
-          <p>Genres: {movie.genres && movie.genres.length > 0 ? movie.genres.join(", ") : "—"}</p>
-          <p>Language: {movie.language ?? "—"}</p>
-          <p>Runtime: {movie.runtime_minutes ? `${movie.runtime_minutes} min` : "—"}</p>
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+      <div className="flex flex-col gap-8 sm:flex-row">
+        <div className="mx-auto w-56 flex-shrink-0 sm:mx-0 sm:w-64">
+          {movie.poster_path ? (
+            <img
+              src={`${POSTER_BASE}${movie.poster_path}`}
+              alt={movie.title}
+              className="w-full rounded-sm border border-border shadow-lg"
+            />
+          ) : (
+            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-sm border border-border bg-surface text-sm text-muted">
+              No poster
+            </div>
+          )}
         </div>
-      </div>
 
-      <hr />
+        <div className="flex-1">
+          <h1 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">
+            {movie.title}
+          </h1>
+          <p className="mt-2 text-sm tracking-wide text-muted">
+            {[
+              year,
+              movie.genres && movie.genres.length > 0 ? movie.genres.join(", ") : null,
+              movie.runtime_minutes ? `${movie.runtime_minutes} min` : null,
+              movie.language ? movie.language.toUpperCase() : null,
+            ]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </p>
 
-      {token ? (
-        <div>
-          <h2>Your Actions</h2>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <RatingBadge source="imdb" value={movie.imdb_rating} suffix="/10" />
+            <RatingBadge source="rt" value={movie.rotten_tomatoes_rating} suffix="%" />
+            <RatingBadge source="letterboxd" value={movie.letterboxd_rating} suffix="/5" />
+            <RatingBadge
+              source="cinner"
+              value={movie.cinner_average_rating}
+              suffix={movie.cinner_ratings_count > 0 ? ` (${movie.cinner_ratings_count})` : ""}
+            />
+          </div>
 
-          <div>
-            <label>Your rating: </label>
-            <select value={ratingChoice} onChange={(e) => setRatingChoice(e.target.value)}>
-              <option value="">-- select --</option>
-              {RATING_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <button onClick={handleRate} disabled={!ratingChoice}>
-              Submit rating
-            </button>
-            {movie.your_rating !== null && (
-              <button onClick={handleClearRating}>Clear rating</button>
+          {movie.synopsis && (
+            <p className="mt-6 max-w-2xl leading-relaxed text-foreground/90">{movie.synopsis}</p>
+          )}
+
+          <div className="mt-6 space-y-2 text-sm">
+            <p>
+              <span className="text-muted">Director </span>
+              <span className="text-foreground">{movie.director ?? "—"}</span>
+            </p>
+            <p>
+              <span className="text-muted">Cast </span>
+              <span className="text-foreground">
+                {movie.main_cast && movie.main_cast.length > 0 ? movie.main_cast.join(", ") : "—"}
+              </span>
+            </p>
+          </div>
+
+          <div className="mt-8 border-t border-border pt-6">
+            {token ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={ratingChoice}
+                  onChange={(e) => setRatingChoice(e.target.value)}
+                  className="text-sm"
+                >
+                  <option value="">Rate...</option>
+                  {RATING_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={handleRate} disabled={!ratingChoice} className={ACTION_BUTTON}>
+                  Submit
+                </button>
+                {movie.your_rating !== null && (
+                  <button onClick={handleClearRating} className={ACTION_BUTTON}>
+                    Clear rating
+                  </button>
+                )}
+
+                <button
+                  onClick={toggleWatched}
+                  className={movie.watched ? ACTION_BUTTON_ACTIVE : ACTION_BUTTON}
+                >
+                  {movie.watched ? "Watched ✓" : "Mark as Watched"}
+                </button>
+
+                <button
+                  onClick={toggleWatchlist}
+                  className={movie.in_watchlist ? ACTION_BUTTON_ACTIVE : ACTION_BUTTON}
+                >
+                  {movie.in_watchlist ? "On Watchlist ✓" : "Add to Watchlist"}
+                </button>
+
+                {message && <p className="w-full text-sm text-accent">{message}</p>}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">
+                <Link href="/login" className="text-accent hover:underline">
+                  Log in
+                </Link>{" "}
+                to rate, track, or add this movie to your watchlist.
+              </p>
             )}
           </div>
-
-          <div>
-            <button onClick={toggleWatched}>
-              {movie.watched ? "Remove from Watched" : "Mark as Watched"}
-            </button>
-          </div>
-
-          <div>
-            <button onClick={toggleWatchlist}>
-              {movie.in_watchlist ? "Remove from Watchlist" : "Add to Watchlist"}
-            </button>
-          </div>
-
-          {message && <p>{message}</p>}
         </div>
-      ) : (
-        <p>
-          <Link href="/login">Log in</Link> to rate, track, or add this movie to your watchlist.
-        </p>
-      )}
+      </div>
     </main>
   );
 }

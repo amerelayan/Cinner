@@ -24,34 +24,44 @@ type Slot = {
   tier: "base" | "sm" | "lg";
 };
 
-// A hand-curated, geometrically-checked composition: a row of 6 across the top,
-// a row of 5 across the bottom, and 2 posters down each side, sized and spaced so
-// no two slots' boxes touch or overlap (verified against actual pixel geometry,
-// including margin for each poster's rotation) at the reference layout width.
-// Randomness applies to which movies fill these slots, not to the layout itself.
+// A hand-curated, geometrically-checked composition: a row of 8 across the top,
+// a row of 8 across the bottom, 2 posters down each far edge, and 2 more filling
+// the space beside the search bar, sized and spaced so no two slots' boxes touch
+// or overlap — verified against actual rendered pixel geometry (including each
+// poster's rotation and full floating range), not just eyeballed. Randomness
+// applies to which movies fill these slots, not to the layout itself.
 const SLOTS: Slot[] = [
   // Top row
-  { top: "3%", left: "3%", width: 72, rotate: -8, duration: 8, delay: 0, dx: 10, dy: -16, tier: "base" },
-  { top: "3%", left: "19%", width: 100, rotate: 6, duration: 9, delay: 0.5, dx: -9, dy: 15, tier: "sm" },
-  { top: "3%", left: "35%", width: 100, rotate: -5, duration: 7.5, delay: 1, dx: 11, dy: -14, tier: "lg" },
-  { top: "3%", left: "53%", width: 100, rotate: 5, duration: 9.5, delay: 0.3, dx: -10, dy: 16, tier: "lg" },
-  { top: "3%", left: "69%", width: 100, rotate: -6, duration: 8, delay: 1.4, dx: 10, dy: -15, tier: "sm" },
-  { top: "3%", right: "3%", width: 72, rotate: 7, duration: 9, delay: 0.8, dx: -11, dy: 14, tier: "base" },
+  { top: "3%", left: "1%", width: 110, rotate: -8, duration: 8, delay: 0, dx: 16, dy: -24, tier: "base" },
+  { top: "3%", left: "14%", width: 105, rotate: 6, duration: 9, delay: 0.5, dx: -15, dy: 22, tier: "sm" },
+  { top: "3%", left: "26.5%", width: 115, rotate: -5, duration: 7.5, delay: 1, dx: 17, dy: -21, tier: "lg" },
+  { top: "3%", left: "39%", width: 110, rotate: 5, duration: 9.5, delay: 0.3, dx: -16, dy: 23, tier: "lg" },
+  { top: "3%", left: "51.5%", width: 115, rotate: -6, duration: 8, delay: 1.4, dx: 15, dy: -22, tier: "lg" },
+  { top: "3%", left: "64%", width: 105, rotate: 6, duration: 9, delay: 0.8, dx: -17, dy: 21, tier: "sm" },
+  { top: "3%", left: "76.5%", width: 110, rotate: -6, duration: 8.5, delay: 0.6, dx: 16, dy: -23, tier: "sm" },
+  { top: "3%", right: "1%", width: 110, rotate: 7, duration: 8.5, delay: 1.2, dx: -16, dy: 22, tier: "base" },
 
-  // Left column
-  { top: "28%", left: "1%", width: 80, rotate: -7, duration: 8.5, delay: 0.6, dx: 9, dy: -15, tier: "lg" },
-  { top: "48%", left: "1%", width: 80, rotate: 6, duration: 9.5, delay: 1.2, dx: -10, dy: 14, tier: "lg" },
+  // Far-left column
+  { top: "30%", left: "0.5%", width: 85, rotate: -7, duration: 8.5, delay: 0.6, dx: 12, dy: -15, tier: "lg" },
+  { top: "52%", left: "0.5%", width: 75, rotate: 6, duration: 9.5, delay: 1.2, dx: -13, dy: 15, tier: "lg" },
 
-  // Right column
-  { top: "28%", right: "1%", width: 80, rotate: 7, duration: 8, delay: 0.2, dx: -9, dy: 15, tier: "lg" },
-  { top: "48%", right: "1%", width: 80, rotate: -6, duration: 9, delay: 1.5, dx: 10, dy: -14, tier: "lg" },
+  // Far-right column
+  { top: "30%", right: "0.5%", width: 85, rotate: 7, duration: 8, delay: 0.2, dx: -12, dy: 15, tier: "lg" },
+  { top: "52%", right: "0.5%", width: 75, rotate: -6, duration: 9, delay: 1.5, dx: 13, dy: -15, tier: "lg" },
+
+  // Inner-flank posters, filling the space beside the search bar
+  { top: "38%", left: "16%", width: 100, rotate: 6, duration: 8.5, delay: 0.9, dx: 16, dy: -23, tier: "lg" },
+  { top: "38%", right: "16%", width: 100, rotate: -6, duration: 9, delay: 0.3, dx: -16, dy: 23, tier: "lg" },
 
   // Bottom row
-  { top: "68%", left: "3%", width: 72, rotate: 6, duration: 8.5, delay: 0.4, dx: -10, dy: 15, tier: "base" },
-  { top: "68%", left: "22%", width: 95, rotate: -5, duration: 9, delay: 1.1, dx: 11, dy: -14, tier: "sm" },
-  { top: "68%", left: "42%", width: 100, rotate: 6, duration: 7.5, delay: 0.7, dx: -9, dy: 16, tier: "lg" },
-  { top: "68%", left: "62%", width: 95, rotate: -6, duration: 9.5, delay: 0.9, dx: 10, dy: -15, tier: "sm" },
-  { top: "68%", right: "3%", width: 72, rotate: 5, duration: 8, delay: 1.3, dx: -11, dy: 14, tier: "base" },
+  { top: "72%", left: "1%", width: 110, rotate: 6, duration: 8.5, delay: 0.4, dx: -16, dy: 23, tier: "base" },
+  { top: "72%", left: "14%", width: 105, rotate: -5, duration: 9, delay: 1.1, dx: 17, dy: -21, tier: "sm" },
+  { top: "72%", left: "26.5%", width: 115, rotate: 6, duration: 7.5, delay: 0.7, dx: -15, dy: 24, tier: "lg" },
+  { top: "72%", left: "39%", width: 110, rotate: -6, duration: 9.5, delay: 0.9, dx: 16, dy: -22, tier: "lg" },
+  { top: "72%", left: "51.5%", width: 115, rotate: 5, duration: 8, delay: 1.3, dx: -17, dy: 21, tier: "lg" },
+  { top: "72%", left: "64%", width: 105, rotate: -7, duration: 9, delay: 0.6, dx: 15, dy: -23, tier: "sm" },
+  { top: "72%", left: "76.5%", width: 110, rotate: 6, duration: 8.5, delay: 1.0, dx: -16, dy: 22, tier: "sm" },
+  { top: "72%", right: "1%", width: 110, rotate: -5, duration: 9, delay: 0.5, dx: 16, dy: -20, tier: "base" },
 ];
 
 const TIER_CLASS: Record<Slot["tier"], string> = {
@@ -137,7 +147,7 @@ export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
 
                 {isHovered && (
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-2 pb-2 pt-6 text-center">
-                    <p className="font-display text-xs tracking-wide text-foreground">
+                    <p className="font-display text-[11px] leading-tight tracking-wide text-foreground">
                       {movie.title}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted">

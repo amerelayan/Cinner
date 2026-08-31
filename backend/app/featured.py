@@ -3,7 +3,7 @@ import random
 
 from app.tmdb import MovieNotFoundError, fetch_movie_basic
 
-# A curated pool of ~50 iconic, widely-recognizable movies spanning multiple decades
+# A curated pool of ~100 iconic, widely-recognizable movies spanning multiple decades
 # and genres, used to populate the homepage's floating poster wall. IDs verified
 # directly against the TMDB API (title + release year cross-checked) rather than
 # assumed, to avoid picking the wrong entry (e.g. a remake or unrelated movie).
@@ -13,6 +13,11 @@ FEATURED_MOVIE_IDS = [
     98, 857, 424, 497, 1422, 1359, 1124, 68718, 106646, 500,
     629, 28, 348, 679, 78, 280, 1366, 489, 244786, 37165,
     38, 6977, 37799, 949, 524, 510, 14, 694, 289, 423,
+    11, 1891, 1892, 329, 601, 85, 8587, 862, 12, 14160,
+    10681, 129, 12477, 496243, 313369, 194, 598, 490132, 389, 1585,
+    872, 239, 213, 426, 567, 829, 185, 600, 792, 197,
+    745, 77, 115, 275, 7345, 16869, 24, 466272, 475557, 299534,
+    24428, 1726, 284054, 419430, 376867, 399055, 354912, 150540, 2062, 9806,
 ]
 
 _pool_cache: list[dict] | None = None
