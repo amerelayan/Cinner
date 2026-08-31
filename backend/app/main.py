@@ -368,17 +368,56 @@ async def get_profile(user: dict = Depends(get_current_user)):
     try:
         row = await conn.fetchrow(
             """
-            SELECT username, profile_picture_url, preferred_genres,
+            SELECT username, profile_picture_url, location, preferred_genres,
                    preferred_movie_age, prefers_imdb_top_250
             FROM public.profiles WHERE id = $1
             """,
             user["sub"],
         )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        watched_count = await conn.fetchval(
+            "SELECT count(*) FROM public.watched WHERE user_id = $1", user["sub"]
+        )
     finally:
         await conn.close()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    return dict(row)
+    return {**dict(row), "watched_count": watched_count}
+
+
+class LocationUpdate(BaseModel):
+    location: str
+
+
+@app.post("/profile/location")
+async def update_location(payload: LocationUpdate, user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        await conn.execute(
+            "UPDATE public.profiles SET location = $1, updated_at = now() WHERE id = $2",
+            payload.location,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"location": payload.location}
+
+
+class PictureUpdate(BaseModel):
+    profile_picture_url: str
+
+
+@app.post("/profile/picture")
+async def update_picture(payload: PictureUpdate, user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        await conn.execute(
+            "UPDATE public.profiles SET profile_picture_url = $1, updated_at = now() WHERE id = $2",
+            payload.profile_picture_url,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"profile_picture_url": payload.profile_picture_url}
 
 
 class GenresUpdate(BaseModel):
