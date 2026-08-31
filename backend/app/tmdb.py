@@ -6,6 +6,14 @@ import httpx
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
+# TMDB's canonical movie genre list (stable, confirmed against their /genre/movie/list
+# endpoint). Kept as a constant rather than fetched live since it essentially never changes.
+VALID_GENRES = [
+    "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama",
+    "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance",
+    "Science Fiction", "TV Movie", "Thriller", "War", "Western",
+]
+
 
 class MovieNotFoundError(Exception):
     pass

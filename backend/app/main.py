@@ -11,7 +11,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from app.auth import get_current_user, get_optional_user
-from app.tmdb import MovieNotFoundError, ensure_movie_cached, fetch_movie_details, search_movies
+from app.tmdb import (
+    VALID_GENRES,
+    MovieNotFoundError,
+    ensure_movie_cached,
+    fetch_movie_details,
+    search_movies,
+)
+
+VALID_AGE_PREFERENCES = [
+    "new", "last_5_years", "last_10_years", "last_20_years", "25_plus_years", "no_preference",
+]
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
@@ -338,3 +348,100 @@ async def create_profile(payload: ProfileCreate, user: dict = Depends(get_curren
     finally:
         await conn.close()
     return {"id": user_id, "username": payload.username}
+
+
+@app.get("/genres")
+def get_genres():
+    return {"genres": VALID_GENRES}
+
+
+@app.get("/profile")
+async def get_profile(user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT username, profile_picture_url, preferred_genres,
+                   preferred_movie_age, prefers_imdb_top_250
+            FROM public.profiles WHERE id = $1
+            """,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return dict(row)
+
+
+class GenresUpdate(BaseModel):
+    genres: list[str]
+
+    @field_validator("genres")
+    @classmethod
+    def validate_genres(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("at least one genre must be selected")
+        invalid = sorted(set(value) - set(VALID_GENRES))
+        if invalid:
+            raise ValueError(f"invalid genres: {invalid}")
+        return value
+
+
+@app.post("/profile/genres")
+async def update_genres(payload: GenresUpdate, user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        await conn.execute(
+            "UPDATE public.profiles SET preferred_genres = $1, updated_at = now() WHERE id = $2",
+            payload.genres,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"preferred_genres": payload.genres}
+
+
+class AgePreferenceUpdate(BaseModel):
+    age_preference: str
+
+    @field_validator("age_preference")
+    @classmethod
+    def validate_age_preference(cls, value: str) -> str:
+        if value not in VALID_AGE_PREFERENCES:
+            raise ValueError(f"age_preference must be one of {VALID_AGE_PREFERENCES}")
+        return value
+
+
+@app.post("/profile/age-preference")
+async def update_age_preference(payload: AgePreferenceUpdate, user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        await conn.execute(
+            "UPDATE public.profiles SET preferred_movie_age = $1, updated_at = now() WHERE id = $2",
+            payload.age_preference,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"preferred_movie_age": payload.age_preference}
+
+
+class ImdbTop250PreferenceUpdate(BaseModel):
+    prefers_imdb_top_250: bool
+
+
+@app.post("/profile/imdb-top-250-preference")
+async def update_imdb_top_250_preference(
+    payload: ImdbTop250PreferenceUpdate, user: dict = Depends(get_current_user)
+):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        await conn.execute(
+            "UPDATE public.profiles SET prefers_imdb_top_250 = $1, updated_at = now() WHERE id = $2",
+            payload.prefers_imdb_top_250,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"prefers_imdb_top_250": payload.prefers_imdb_top_250}
