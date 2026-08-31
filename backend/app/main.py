@@ -127,6 +127,25 @@ class MovieAction(BaseModel):
     tmdb_id: int
 
 
+@app.get("/favorites")
+async def get_favorites(user: dict = Depends(get_current_user)):
+    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT m.id AS tmdb_id, m.title, m.poster_path
+            FROM public.favorites f
+            JOIN public.movies m ON m.id = f.movie_id
+            WHERE f.user_id = $1
+            ORDER BY f.created_at
+            """,
+            user["sub"],
+        )
+    finally:
+        await conn.close()
+    return {"favorites": [dict(row) for row in rows]}
+
+
 @app.post("/favorites", status_code=201)
 async def add_favorite(payload: MovieAction, user: dict = Depends(get_current_user)):
     count = await _add_movie_membership("favorites", user["sub"], payload.tmdb_id, max_count=5)
