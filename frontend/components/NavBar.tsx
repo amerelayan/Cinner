@@ -28,7 +28,7 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 text-accent">
+        <Link href="/" className="flex items-center gap-2" style={{ color: "#e0262e" }}>
           <FilmReelIcon className="h-5 w-5" />
           <span className="font-display text-xl tracking-[0.15em]">CINNER</span>
         </Link>

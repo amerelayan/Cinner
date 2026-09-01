@@ -268,29 +268,39 @@ export default function MovieDetailPage() {
 
                 <div className="mt-6 border-t border-border pt-6">
                   {!matchResult ? (
-                    <button
-                      onClick={handleCalculateMatch}
-                      disabled={matchLoading}
-                      className="rounded border border-border px-4 py-2 text-sm tracking-wide text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {matchLoading ? "Calculating..." : "Calculate Match"}
-                    </button>
+                    <div className="flex flex-col items-start gap-2">
+                      <button
+                        onClick={handleCalculateMatch}
+                        disabled={matchLoading}
+                        className="flex items-center gap-2 rounded-full bg-accent px-6 py-2.5 font-display text-sm tracking-wide text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                      >
+                        <span aria-hidden>🎯</span>
+                        {matchLoading ? "Calculating..." : "Calculate Match"}
+                      </button>
+                      <p className="text-xs text-muted">
+                        Calculates your Match % and Predicted Rating for this movie, based on your taste.
+                      </p>
+                    </div>
                   ) : (
-                    <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
-                      <div>
+                    <div className="flex flex-wrap items-stretch gap-4">
+                      <div className="rounded-lg border border-border bg-surface px-5 py-4">
                         <p className="text-xs uppercase tracking-wide text-muted">Match</p>
-                        <p className="font-display text-3xl text-accent">{matchResult.match_pct}%</p>
+                        <p className="font-display text-4xl text-accent">{matchResult.match_pct}%</p>
                       </div>
-                      <div>
+                      <div className="rounded-lg border border-border bg-surface px-5 py-4">
                         <p className="text-xs uppercase tracking-wide text-muted">Predicted Rating</p>
-                        <p className="font-display text-3xl text-foreground">
-                          {matchResult.predicted_rating}/10
+                        <p className="font-display text-4xl text-foreground">
+                          {matchResult.predicted_rating}
+                          <span className="text-lg text-muted">/10</span>
                         </p>
                       </div>
                       {matchResult.reasons.length > 0 && (
-                        <ul className="min-w-[220px] flex-1 space-y-1 text-sm text-muted">
+                        <ul className="min-w-[220px] flex-1 space-y-1.5 text-sm text-muted">
                           {matchResult.reasons.map((reason) => (
-                            <li key={reason}>· {reason}</li>
+                            <li key={reason} className="flex gap-2">
+                              <span className="text-accent">✓</span>
+                              {reason}
+                            </li>
                           ))}
                         </ul>
                       )}
