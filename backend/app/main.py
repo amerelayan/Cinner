@@ -1,3 +1,4 @@
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -119,6 +120,9 @@ async def movies_search(q: str, page: int = 1, user: dict | None = Depends(get_o
         raise HTTPException(status_code=422, detail="Query parameter 'q' must not be empty")
     data = await search_movies(query=q, page=page)
     data["results"] = await _attach_tracking_flags(data["results"], user)
+    if user:
+        async with app.state.pool.acquire() as conn:
+            await _log_event(conn, user["sub"], "search", metadata={"query": q})
     return data
 
 
@@ -208,6 +212,10 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
         )
         movie["watched"] = extra["watched"]
         movie["in_watchlist"] = extra["in_watchlist"]
+
+        if user:
+            await _log_event(conn, user["sub"], "movie_opened", movie_id=tmdb_id)
+
         return movie
 
 
@@ -218,6 +226,28 @@ async def cache_movie_or_404(conn, tmdb_id: int) -> None:
         raise HTTPException(status_code=404, detail="Movie not found")
     except (httpx.HTTPStatusError, httpx.RequestError):
         raise HTTPException(status_code=502, detail="TMDB is currently unavailable")
+
+
+# The events log records meaningful user actions for the recommendation engine.
+# Deliberately not tracking mouse movement, scroll, hover, etc. — just the actions
+# a taste profile can actually be built from.
+EVENT_TYPES_BY_TABLE = {
+    "favorites": ("favorite_added", "favorite_removed"),
+    "watched": ("watched_added", "watched_removed"),
+    "watchlist": ("watchlist_added", "watchlist_removed"),
+}
+
+
+async def _log_event(
+    conn, user_id: str, event_type: str, movie_id: int | None = None, metadata: dict | None = None
+) -> None:
+    await conn.execute(
+        "INSERT INTO public.events (user_id, event_type, movie_id, metadata) VALUES ($1, $2, $3, $4::jsonb)",
+        user_id,
+        event_type,
+        movie_id,
+        json.dumps(metadata) if metadata is not None else None,
+    )
 
 
 async def _add_movie_membership(
@@ -242,11 +272,17 @@ async def _add_movie_membership(
                         detail=f"You already have {max_count} favorite movies",
                     )
 
-            await conn.execute(
+            result = await conn.execute(
                 f"INSERT INTO public.{table} (user_id, movie_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 user_id,
                 tmdb_id,
             )
+            # ON CONFLICT DO NOTHING means the row count tells us whether this was
+            # actually a new addition — skip logging a duplicate no-op event.
+            if int(result.rsplit(" ", 1)[-1]) > 0:
+                added_event, _ = EVENT_TYPES_BY_TABLE[table]
+                await _log_event(conn, user_id, added_event, movie_id=tmdb_id)
+
             new_count = await conn.fetchval(
                 f"SELECT count(*) FROM public.{table} WHERE user_id = $1", user_id
             )
@@ -255,11 +291,14 @@ async def _add_movie_membership(
 
 async def _remove_movie_membership(table: str, user_id: str, tmdb_id: int) -> None:
     async with app.state.pool.acquire() as conn:
-        await conn.execute(
+        result = await conn.execute(
             f"DELETE FROM public.{table} WHERE user_id = $1 AND movie_id = $2",
             user_id,
             tmdb_id,
         )
+        if int(result.rsplit(" ", 1)[-1]) > 0:
+            _, removed_event = EVENT_TYPES_BY_TABLE[table]
+            await _log_event(conn, user_id, removed_event, movie_id=tmdb_id)
 
 
 class MovieAction(BaseModel):
@@ -366,6 +405,11 @@ async def upsert_rating(payload: RatingCreate, user: dict = Depends(get_current_
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
             await cache_movie_or_404(conn, payload.tmdb_id)
+            previous_rating = await conn.fetchval(
+                "SELECT rating FROM public.ratings WHERE user_id = $1 AND movie_id = $2",
+                user["sub"],
+                payload.tmdb_id,
+            )
             await conn.execute(
                 """
                 INSERT INTO public.ratings (user_id, movie_id, rating)
@@ -376,6 +420,16 @@ async def upsert_rating(payload: RatingCreate, user: dict = Depends(get_current_
                 user["sub"],
                 payload.tmdb_id,
                 payload.rating,
+            )
+            await _log_event(
+                conn,
+                user["sub"],
+                "rating_changed" if previous_rating is not None else "rating_created",
+                movie_id=payload.tmdb_id,
+                metadata={
+                    "rating": payload.rating,
+                    "previous_rating": float(previous_rating) if previous_rating is not None else None,
+                },
             )
     return {"tmdb_id": payload.tmdb_id, "rating": payload.rating}
 
