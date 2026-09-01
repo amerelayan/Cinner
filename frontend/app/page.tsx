@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PosterWall from "@/components/PosterWall";
 import FilmReelIcon from "@/components/FilmReelIcon";
@@ -32,8 +32,17 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [liveResults, setLiveResults] = useState<SearchResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const fetchedFeatured = useRef(false);
 
   useEffect(() => {
+    // React's development-mode Strict Mode runs this effect twice on mount;
+    // since /movies/featured returns a different random sample each call,
+    // the second (harmless-looking) fetch was silently swapping the posters
+    // out from under the first a moment after they appeared. Only the first
+    // call should ever actually run.
+    if (fetchedFeatured.current) return;
+    fetchedFeatured.current = true;
+
     async function init() {
       const t = await getAccessToken();
       setToken(t);
