@@ -15,6 +15,10 @@ from pydantic import BaseModel, field_validator
 from app.auth import get_current_user, get_optional_user
 from app.featured import get_featured_pool, pick_random_featured
 from app.movie_lists import get_popular_movies, get_top_rated_movies, get_trending_movies
+from app.recommendations.foryou import build_for_you
+from app.recommendations.score import compute_match_percentage, explain_match, predict_rating
+from app.recommendations.taste import gather_user_taste, get_reference_movies
+from app.recommendations.vectorize import vectorize_movie
 from app.tmdb import (
     VALID_GENRES,
     MovieNotFoundError,
@@ -144,6 +148,11 @@ async def movies_popular(user: dict | None = Depends(get_optional_user)):
     return {"popular": await _attach_tracking_flags(movies, user)}
 
 
+@app.get("/for-you")
+async def for_you(user: dict = Depends(get_current_user)):
+    return await build_for_you(app.state.pool, user["sub"])
+
+
 @app.get("/movies/{tmdb_id}")
 async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)):
     async with app.state.pool.acquire() as conn:
@@ -217,6 +226,65 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
             await _log_event(conn, user["sub"], "movie_opened", movie_id=tmdb_id)
 
         return movie
+
+
+@app.get("/movies/{tmdb_id}/match")
+async def calculate_match(tmdb_id: int, user: dict = Depends(get_current_user)):
+    async with app.state.pool.acquire() as conn:
+        await cache_movie_or_404(conn, tmdb_id)
+
+        movie_row = await conn.fetchrow(
+            """
+            SELECT id, title, genres, main_cast, director, language, release_date,
+                   runtime_minutes, vote_count, popularity, tmdb_rating, keywords
+            FROM public.movies WHERE id = $1
+            """,
+            tmdb_id,
+        )
+        movie = dict(movie_row)
+        movie_vector = vectorize_movie(movie)
+
+        taste_vector, rated_movies, profile = await gather_user_taste(conn, user["sub"])
+        match_pct = compute_match_percentage(taste_vector, movie_vector)
+        predicted_rating, method = predict_rating(rated_movies, movie_vector, match_pct)
+
+        reference_movies = await get_reference_movies(conn, user["sub"])
+        reasons = explain_match(movie, profile or {}, reference_movies)
+
+        await conn.execute(
+            """
+            INSERT INTO public.match_calculations
+                (user_id, movie_id, match_pct, predicted_rating, method, reasons)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            ON CONFLICT (user_id, movie_id) DO UPDATE SET
+                match_pct = EXCLUDED.match_pct,
+                predicted_rating = EXCLUDED.predicted_rating,
+                method = EXCLUDED.method,
+                reasons = EXCLUDED.reasons,
+                computed_at = now()
+            """,
+            user["sub"],
+            tmdb_id,
+            match_pct,
+            predicted_rating,
+            method,
+            json.dumps(reasons),
+        )
+
+        await _log_event(
+            conn,
+            user["sub"],
+            "match_calculated",
+            movie_id=tmdb_id,
+            metadata={"match_pct": match_pct, "predicted_rating": predicted_rating, "method": method},
+        )
+
+    return {
+        "match_pct": match_pct,
+        "predicted_rating": predicted_rating,
+        "method": method,
+        "reasons": reasons,
+    }
 
 
 async def cache_movie_or_404(conn, tmdb_id: int) -> None:

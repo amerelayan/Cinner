@@ -29,6 +29,13 @@ type MovieDetail = {
   in_watchlist: boolean;
 };
 
+type MatchResult = {
+  match_pct: number;
+  predicted_rating: number;
+  method: "regression" | "fallback";
+  reasons: string[];
+};
+
 const POSTER_BASE = "https://image.tmdb.org/t/p/w400";
 
 export default function MovieDetailPage() {
@@ -39,6 +46,9 @@ export default function MovieDetailPage() {
   const [error, setError] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState("");
 
   async function load() {
     const currentToken = await getAccessToken();
@@ -138,6 +148,21 @@ export default function MovieDetailPage() {
     }
   }
 
+  async function handleCalculateMatch() {
+    if (!token) return;
+    setMatchLoading(true);
+    setMatchError("");
+    const res = await fetch(`http://localhost:8000/movies/${tmdbId}/match`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setMatchLoading(false);
+    if (!res.ok) {
+      setMatchError("Couldn't calculate a match right now.");
+      return;
+    }
+    setMatchResult(await res.json());
+  }
+
   if (error) {
     return (
       <main className="flex flex-1 items-center justify-center px-4">
@@ -218,27 +243,62 @@ export default function MovieDetailPage() {
 
           <div className="mt-8 border-t border-border pt-6">
             {token ? (
-              <div className="flex flex-wrap items-center gap-5">
-                <StarRating value={movie.your_rating} onRate={handleRate} onClear={handleClearRating} />
+              <>
+                <div className="flex flex-wrap items-center gap-5">
+                  <StarRating value={movie.your_rating} onRate={handleRate} onClear={handleClearRating} />
 
-                <TrackButton
-                  icon="eye"
-                  active={movie.watched}
-                  inactiveLabel="Watch"
-                  activeLabel="Watched"
-                  onClick={toggleWatched}
-                />
+                  <TrackButton
+                    icon="eye"
+                    active={movie.watched}
+                    inactiveLabel="Watch"
+                    activeLabel="Watched"
+                    onClick={toggleWatched}
+                  />
 
-                <TrackButton
-                  icon="bookmark"
-                  active={movie.in_watchlist}
-                  inactiveLabel="Watchlist"
-                  activeLabel="In Watchlist"
-                  onClick={toggleWatchlist}
-                />
+                  <TrackButton
+                    icon="bookmark"
+                    active={movie.in_watchlist}
+                    inactiveLabel="Watchlist"
+                    activeLabel="In Watchlist"
+                    onClick={toggleWatchlist}
+                  />
 
-                {message && <p className="w-full text-sm text-accent">{message}</p>}
-              </div>
+                  {message && <p className="w-full text-sm text-accent">{message}</p>}
+                </div>
+
+                <div className="mt-6 border-t border-border pt-6">
+                  {!matchResult ? (
+                    <button
+                      onClick={handleCalculateMatch}
+                      disabled={matchLoading}
+                      className="rounded border border-border px-4 py-2 text-sm tracking-wide text-foreground transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {matchLoading ? "Calculating..." : "Calculate Match"}
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted">Match</p>
+                        <p className="font-display text-3xl text-accent">{matchResult.match_pct}%</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted">Predicted Rating</p>
+                        <p className="font-display text-3xl text-foreground">
+                          {matchResult.predicted_rating}/10
+                        </p>
+                      </div>
+                      {matchResult.reasons.length > 0 && (
+                        <ul className="min-w-[220px] flex-1 space-y-1 text-sm text-muted">
+                          {matchResult.reasons.map((reason) => (
+                            <li key={reason}>· {reason}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {matchError && <p className="mt-2 text-sm text-accent">{matchError}</p>}
+                </div>
+              </>
             ) : (
               <p className="text-sm text-muted">
                 <Link href="/login" className="text-accent hover:underline">

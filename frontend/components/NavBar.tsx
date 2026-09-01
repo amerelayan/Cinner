@@ -38,9 +38,14 @@ export default function NavBar() {
             MOVIES
           </Link>
           {loggedIn && (
-            <Link href="/profile" className={NAV_LINK}>
-              PROFILE
-            </Link>
+            <>
+              <Link href="/for-you" className={NAV_LINK}>
+                FOR YOU
+              </Link>
+              <Link href="/profile" className={NAV_LINK}>
+                PROFILE
+              </Link>
+            </>
           )}
         </nav>
 
