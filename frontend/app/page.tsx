@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PosterWall from "@/components/PosterWall";
 import FilmReelIcon from "@/components/FilmReelIcon";
+import { getAccessToken } from "@/lib/supabaseClient";
 
 type FeaturedMovie = {
   tmdb_id: number;
@@ -11,6 +12,8 @@ type FeaturedMovie = {
   release_date: string | null;
   poster_path: string | null;
   tmdb_rating: number | null;
+  watched: boolean;
+  in_watchlist: boolean;
 };
 
 type SearchResult = {
@@ -25,16 +28,65 @@ const POSTER_THUMB = "https://image.tmdb.org/t/p/w92";
 export default function Home() {
   const router = useRouter();
   const [movies, setMovies] = useState<FeaturedMovie[]>([]);
+  const [token, setToken] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [liveResults, setLiveResults] = useState<SearchResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/movies/featured")
-      .then((res) => (res.ok ? res.json() : { movies: [] }))
-      .then((data) => setMovies(data.movies ?? []))
-      .catch(() => setMovies([]));
+    async function init() {
+      const t = await getAccessToken();
+      setToken(t);
+      const headers: Record<string, string> = {};
+      if (t) headers.Authorization = `Bearer ${t}`;
+      try {
+        const res = await fetch("http://localhost:8000/movies/featured", { headers });
+        const data = res.ok ? await res.json() : { movies: [] };
+        setMovies(data.movies ?? []);
+      } catch {
+        setMovies([]);
+      }
+    }
+    init();
   }, []);
+
+  function patchMovie(tmdbId: number, patch: Partial<FeaturedMovie>) {
+    setMovies((prev) => prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, ...patch } : m)));
+  }
+
+  async function toggleWatched(movie: FeaturedMovie) {
+    if (!token) return;
+    const wasWatched = movie.watched;
+    patchMovie(movie.tmdb_id, { watched: !wasWatched });
+    const res = wasWatched
+      ? await fetch(`http://localhost:8000/watched/${movie.tmdb_id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      : await fetch("http://localhost:8000/watched", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
+        });
+    if (!res.ok) patchMovie(movie.tmdb_id, { watched: wasWatched });
+  }
+
+  async function toggleWatchlist(movie: FeaturedMovie) {
+    if (!token) return;
+    const wasInWatchlist = movie.in_watchlist;
+    patchMovie(movie.tmdb_id, { in_watchlist: !wasInWatchlist });
+    const res = wasInWatchlist
+      ? await fetch(`http://localhost:8000/watchlist/${movie.tmdb_id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      : await fetch("http://localhost:8000/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
+        });
+    if (!res.ok) patchMovie(movie.tmdb_id, { in_watchlist: wasInWatchlist });
+  }
 
   useEffect(() => {
     if (!query.trim()) {
@@ -62,7 +114,14 @@ export default function Home() {
 
   return (
     <main className="relative flex flex-1 flex-col items-center overflow-hidden bg-background">
-      {movies.length > 0 && <PosterWall movies={movies} />}
+      {movies.length > 0 && (
+        <PosterWall
+          movies={movies}
+          showTracking={!!token}
+          onToggleWatched={toggleWatched}
+          onToggleWatchlist={toggleWatchlist}
+        />
+      )}
 
       {/* Gentle dimming behind the search area so it stays the focal point;
           the search panel's own background handles direct occlusion. */}
@@ -83,10 +142,6 @@ export default function Home() {
             CINNER
           </h1>
         </div>
-        <p className="mt-2 text-xs tracking-[0.35em] text-muted sm:text-sm">
-          WATCH. RATE. REMEMBER.
-        </p>
-
         <div className="pointer-events-auto relative mt-10 w-full max-w-xl">
           <form
             onSubmit={handleSearch}
@@ -137,17 +192,10 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        <div className="mt-14 flex items-center gap-4 text-xs tracking-[0.25em] text-muted">
-          <span className="h-px w-10 bg-border" />
-          <span>MOVIES STAY. MEMORIES LAST.</span>
-          <span className="h-px w-10 bg-border" />
-        </div>
       </div>
 
       <footer className="pointer-events-none relative z-20 w-full border-t border-border bg-background px-4 py-6 text-center text-xs tracking-wide text-muted">
-        <p>BUILT FOR MOVIE LOVERS.</p>
-        <p className="mt-1">© {new Date().getFullYear()} CINNER</p>
+        <p>© {new Date().getFullYear()} CINNER</p>
       </footer>
     </main>
   );

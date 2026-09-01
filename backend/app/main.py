@@ -81,9 +81,10 @@ async def tmdb_health():
 
 
 @app.get("/movies/featured")
-async def movies_featured(count: int = 22):
+async def movies_featured(count: int = 22, user: dict | None = Depends(get_optional_user)):
     pool = await get_featured_pool()
-    return {"movies": pick_random_featured(pool, count)}
+    picked = pick_random_featured(pool, count)
+    return {"movies": await _attach_tracking_flags(picked, user)}
 
 
 async def _attach_tracking_flags(movies: list[dict], user: dict | None) -> list[dict]:

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import TrackButton from "@/components/TrackButton";
 
 type FeaturedMovie = {
   tmdb_id: number;
@@ -9,6 +10,8 @@ type FeaturedMovie = {
   release_date: string | null;
   poster_path: string | null;
   tmdb_rating: number | null;
+  watched: boolean;
+  in_watchlist: boolean;
 };
 
 type Slot = {
@@ -72,7 +75,17 @@ const TIER_CLASS: Record<Slot["tier"], string> = {
 
 const POSTER_BASE = "https://image.tmdb.org/t/p/w300";
 
-export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
+export default function PosterWall({
+  movies,
+  showTracking,
+  onToggleWatched,
+  onToggleWatchlist,
+}: {
+  movies: FeaturedMovie[];
+  showTracking: boolean;
+  onToggleWatched: (movie: FeaturedMovie) => void;
+  onToggleWatchlist: (movie: FeaturedMovie) => void;
+}) {
   const router = useRouter();
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -97,9 +110,11 @@ export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
               zIndex: isHovered ? 30 : 1,
             }}
           >
-            {/* Outer element owns the floating animation (translate/rotate). */}
+            {/* Outer element owns the floating animation (translate/rotate). Also
+                the positioning root for the tracking icons below, so their hover
+                tooltip isn't clipped by the poster's own overflow-hidden border. */}
             <div
-              className="poster-float"
+              className="relative poster-float"
               style={
                 {
                   "--r": `${slot.rotate}deg`,
@@ -162,6 +177,29 @@ export default function PosterWall({ movies }: { movies: FeaturedMovie[] }) {
                   </div>
                 )}
               </div>
+
+              {isHovered && showTracking && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5">
+                  <div className="pointer-events-auto flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <TrackButton
+                      icon="eye"
+                      size="sm"
+                      active={movie.watched}
+                      inactiveLabel="Watch"
+                      activeLabel="Watched"
+                      onClick={() => onToggleWatched(movie)}
+                    />
+                    <TrackButton
+                      icon="bookmark"
+                      size="sm"
+                      active={movie.in_watchlist}
+                      inactiveLabel="Watchlist"
+                      activeLabel="In Watchlist"
+                      onClick={() => onToggleWatchlist(movie)}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

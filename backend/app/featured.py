@@ -1,7 +1,7 @@
 import asyncio
 import random
 
-from app.tmdb import MovieNotFoundError, fetch_movie_basic
+from app.tmdb import fetch_movie_basic
 
 # A curated pool of ~100 iconic, widely-recognizable movies spanning multiple decades
 # and genres, used to populate the homepage's floating poster wall. IDs verified
@@ -40,12 +40,14 @@ async def get_featured_pool() -> list[dict]:
         if _pool_cache is not None:
             return _pool_cache
 
-        movies = []
-        for tmdb_id in FEATURED_MOVIE_IDS:
-            try:
-                movies.append(await fetch_movie_basic(tmdb_id))
-            except MovieNotFoundError:
-                continue
+        # Fetched concurrently rather than one-by-one — sequentially awaiting ~100
+        # TMDB calls took upwards of 9 seconds on a cold cache, which is exactly
+        # the delay a visitor would see before the homepage's posters appear.
+        results = await asyncio.gather(
+            *(fetch_movie_basic(tmdb_id) for tmdb_id in FEATURED_MOVIE_IDS),
+            return_exceptions=True,
+        )
+        movies = [r for r in results if not isinstance(r, Exception)]
         _pool_cache = movies
         return _pool_cache
 
