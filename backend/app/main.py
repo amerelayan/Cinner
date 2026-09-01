@@ -92,19 +92,20 @@ async def _attach_tracking_flags(movies: list[dict], user: dict | None) -> list[
 
     async with app.state.pool.acquire() as conn:
         ids = [m["tmdb_id"] for m in movies]
-        watched_rows = await conn.fetch(
-            "SELECT movie_id FROM public.watched WHERE user_id = $1 AND movie_id = ANY($2::int[])",
-            user["sub"],
-            ids,
-        )
-        watchlist_rows = await conn.fetch(
-            "SELECT movie_id FROM public.watchlist WHERE user_id = $1 AND movie_id = ANY($2::int[])",
+        rows = await conn.fetch(
+            """
+            SELECT movie_id, 'watched' AS kind FROM public.watched
+                WHERE user_id = $1 AND movie_id = ANY($2::int[])
+            UNION ALL
+            SELECT movie_id, 'watchlist' AS kind FROM public.watchlist
+                WHERE user_id = $1 AND movie_id = ANY($2::int[])
+            """,
             user["sub"],
             ids,
         )
 
-    watched_ids = {r["movie_id"] for r in watched_rows}
-    watchlist_ids = {r["movie_id"] for r in watchlist_rows}
+    watched_ids = {r["movie_id"] for r in rows if r["kind"] == "watched"}
+    watchlist_ids = {r["movie_id"] for r in rows if r["kind"] == "watchlist"}
     return [
         {**m, "watched": m["tmdb_id"] in watched_ids, "in_watchlist": m["tmdb_id"] in watchlist_ids}
         for m in movies
@@ -182,41 +183,30 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
 
         movie = dict(row)
 
-        agg = await conn.fetchrow(
-            "SELECT avg(rating) AS avg_rating, count(*) AS cnt FROM public.ratings WHERE movie_id = $1",
+        # A user_id of NULL never matches a row's user_id, so this one query works
+        # correctly for both logged-in and anonymous requests without branching.
+        user_id = user["sub"] if user else None
+        extra = await conn.fetchrow(
+            """
+            SELECT
+                (SELECT avg(rating) FROM public.ratings WHERE movie_id = $1) AS avg_rating,
+                (SELECT count(*) FROM public.ratings WHERE movie_id = $1) AS ratings_count,
+                (SELECT rating FROM public.ratings WHERE user_id = $2 AND movie_id = $1) AS your_rating,
+                EXISTS(SELECT 1 FROM public.watched WHERE user_id = $2 AND movie_id = $1) AS watched,
+                EXISTS(SELECT 1 FROM public.watchlist WHERE user_id = $2 AND movie_id = $1) AS in_watchlist
+            """,
             tmdb_id,
+            user_id,
         )
-        movie["cinner_average_rating"] = float(agg["avg_rating"]) if agg["avg_rating"] is not None else None
-        movie["cinner_ratings_count"] = agg["cnt"]
-
-        your_rating = None
-        watched = False
-        in_watchlist = False
-        if user:
-            user_id = user["sub"]
-            your_rating_value = await conn.fetchval(
-                "SELECT rating FROM public.ratings WHERE user_id = $1 AND movie_id = $2",
-                user_id,
-                tmdb_id,
-            )
-            your_rating = float(your_rating_value) if your_rating_value is not None else None
-            watched = bool(
-                await conn.fetchval(
-                    "SELECT 1 FROM public.watched WHERE user_id = $1 AND movie_id = $2",
-                    user_id,
-                    tmdb_id,
-                )
-            )
-            in_watchlist = bool(
-                await conn.fetchval(
-                    "SELECT 1 FROM public.watchlist WHERE user_id = $1 AND movie_id = $2",
-                    user_id,
-                    tmdb_id,
-                )
-            )
-        movie["your_rating"] = your_rating
-        movie["watched"] = watched
-        movie["in_watchlist"] = in_watchlist
+        movie["cinner_average_rating"] = (
+            float(extra["avg_rating"]) if extra["avg_rating"] is not None else None
+        )
+        movie["cinner_ratings_count"] = extra["ratings_count"]
+        movie["your_rating"] = (
+            float(extra["your_rating"]) if extra["your_rating"] is not None else None
+        )
+        movie["watched"] = extra["watched"]
+        movie["in_watchlist"] = extra["in_watchlist"]
         return movie
 
 

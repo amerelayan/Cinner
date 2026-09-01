@@ -83,9 +83,9 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
     }
 
 
-async def _fetch_movie_list(path: str) -> list[dict]:
+async def _fetch_movie_list(path: str, params: dict | None = None) -> list[dict]:
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{TMDB_BASE_URL}{path}", headers=_headers())
+        response = await client.get(f"{TMDB_BASE_URL}{path}", headers=_headers(), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -105,11 +105,22 @@ async def fetch_trending_movies() -> list[dict]:
 
 
 async def fetch_top_rated_movies() -> list[dict]:
-    return await _fetch_movie_list("/movie/top_rated")
+    # TMDB's own /movie/top_rated ranks by raw vote average with no vote-count floor,
+    # so a brand-new release with a handful of 10/10 votes outranks genuine classics.
+    # /discover/movie with a minimum vote count gives the actual highest-rated films.
+    return await _fetch_movie_list(
+        "/discover/movie",
+        params={"sort_by": "vote_average.desc", "vote_count.gte": 5000, "include_adult": "false"},
+    )
 
 
 async def fetch_popular_movies() -> list[dict]:
-    return await _fetch_movie_list("/movie/popular")
+    # Sorting by total vote count (rather than TMDB's "popular" = trending-ish right now)
+    # surfaces the most-watched, most iconic movies of all time.
+    return await _fetch_movie_list(
+        "/discover/movie",
+        params={"sort_by": "vote_count.desc", "include_adult": "false"},
+    )
 
 
 async def fetch_movie_basic(tmdb_id: int) -> dict:
