@@ -67,7 +67,7 @@ async def _score_pool(
         movie = dict(row)
         vector = vectorize_movie(movie)
         match_pct = compute_match_percentage(taste_vector, vector)
-        predicted_rating, _ = predict_rating_with_model(model, rated_movies, vector, match_pct)
+        predicted_rating, _ = predict_rating_with_model(model, rated_movies, vector, match_pct, movie)
         scored.append(
             {
                 "tmdb_id": movie["id"],

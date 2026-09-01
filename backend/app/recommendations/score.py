@@ -23,6 +23,27 @@ FALLBACK_BASELINE_RATING = 6.5
 # trustworthy prediction once ratings are still scarce.
 RIDGE_ALPHA = 5.0
 
+# Same idea as IMDB's own weighted-rating formula: a movie's own worldwide
+# TMDB score is only as trustworthy as the number of people who voted on it.
+# BAYESIAN_VOTE_WEIGHT is "how many votes worth of trust" a neutral prior
+# gets — a movie with far fewer votes than that gets pulled hard toward the
+# prior; one with far more is trusted almost at face value.
+QUALITY_PRIOR_MEAN = 6.5
+QUALITY_PRIOR_VOTE_WEIGHT = 200.0
+
+
+def _quality_anchor(movie: dict) -> float:
+    """The movie's own worldwide reception, independent of any one user's
+    taste — used to keep Predicted Rating grounded in reality, especially
+    when we don't yet have enough personal data to trust a learned model."""
+    tmdb_rating = float(movie.get("tmdb_rating") or 0)
+    vote_count = float(movie.get("vote_count") or 0)
+    if tmdb_rating <= 0:
+        return QUALITY_PRIOR_MEAN
+    return (vote_count * tmdb_rating + QUALITY_PRIOR_VOTE_WEIGHT * QUALITY_PRIOR_MEAN) / (
+        vote_count + QUALITY_PRIOR_VOTE_WEIGHT
+    )
+
 
 def compute_match_percentage(taste_vector: np.ndarray, movie_vector: np.ndarray) -> float:
     taste_norm = np.linalg.norm(taste_vector)
@@ -56,12 +77,38 @@ def predict_rating_with_model(
     rated_movies: list[tuple[np.ndarray, float]],
     movie_vector: np.ndarray,
     match_pct: float,
+    movie: dict,
 ) -> tuple[float, str]:
     """Returns (predicted_rating, method) — method is "regression" when a
     fitted model is available, "fallback" otherwise, so callers/UI can be
-    honest about which one produced the number."""
+    honest about which one produced the number.
+
+    Both branches blend in the movie's own worldwide TMDB score (see
+    _quality_anchor) rather than relying purely on the personal signal. This
+    matters most for the regression branch: Ridge is fit to minimize error
+    against the user's past ratings, so if those ratings have little or no
+    spread (e.g. someone has only ever rated movies 9 or 10 so far), there is
+    nothing in the data for the model to learn a *difference* from — the
+    mathematically correct fit degenerates to predicting that same constant
+    for every movie, regardless of the movie's actual features. Weighting the
+    personal prediction by how much real variance it was trained on (and
+    otherwise leaning on the movie's real-world reception) keeps predictions
+    grounded until there's enough personal signal to trust on its own.
+    """
+    quality_anchor = _quality_anchor(movie)
+
     if model is not None:
-        predicted = float(model.predict(movie_vector.reshape(1, -1))[0])
+        raw_prediction = float(model.predict(movie_vector.reshape(1, -1))[0])
+
+        ratings = [rating for _, rating in rated_movies]
+        rating_spread = float(np.std(ratings))
+        # A 2-point spread (e.g. rating movies anywhere from 6 to 8) is
+        # treated as "plenty of variety to learn from"; less than that scales
+        # trust in the model down smoothly rather than as a hard cutoff.
+        variance_confidence = min(1.0, rating_spread / 2.0)
+        personal_weight = 0.3 + 0.55 * variance_confidence  # ranges 0.3-0.85
+
+        predicted = personal_weight * raw_prediction + (1 - personal_weight) * quality_anchor
         return round(min(10.0, max(1.0, predicted)), 1), "regression"
 
     baseline = (
@@ -74,20 +121,22 @@ def predict_rating_with_model(
     # how well this movie matches their taste, capped at +/-2 points so a
     # single data point can't swing the estimate to the extremes.
     adjustment = (match_pct - 50) / 50 * 2.0
-    predicted = min(10.0, max(1.0, baseline + adjustment))
-    return round(predicted, 1), "fallback"
+    personal_guess = baseline + adjustment
+    predicted = 0.5 * personal_guess + 0.5 * quality_anchor
+    return round(min(10.0, max(1.0, predicted)), 1), "fallback"
 
 
 def predict_rating(
     rated_movies: list[tuple[np.ndarray, float]],
     movie_vector: np.ndarray,
     match_pct: float,
+    movie: dict,
 ) -> tuple[float, str]:
     """Convenience wrapper for scoring a single movie (fits and predicts in
     one call) — see fit_rating_model/predict_rating_with_model for scoring
     many candidates against one fitted model."""
     model = fit_rating_model(rated_movies)
-    return predict_rating_with_model(model, rated_movies, movie_vector, match_pct)
+    return predict_rating_with_model(model, rated_movies, movie_vector, match_pct, movie)
 
 
 def explain_match(movie: dict, profile: dict, reference_movies: list[dict]) -> list[str]:

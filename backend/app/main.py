@@ -246,7 +246,7 @@ async def calculate_match(tmdb_id: int, user: dict = Depends(get_current_user)):
 
         taste_vector, rated_movies, profile = await gather_user_taste(conn, user["sub"])
         match_pct = compute_match_percentage(taste_vector, movie_vector)
-        predicted_rating, method = predict_rating(rated_movies, movie_vector, match_pct)
+        predicted_rating, method = predict_rating(rated_movies, movie_vector, match_pct, movie)
 
         reference_movies = await get_reference_movies(conn, user["sub"])
         reasons = explain_match(movie, profile or {}, reference_movies)
