@@ -274,7 +274,6 @@ export default function MovieDetailPage() {
                         disabled={matchLoading}
                         className="flex items-center gap-2 rounded-full bg-accent px-6 py-2.5 font-display text-sm tracking-wide text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                       >
-                        <span aria-hidden>🎯</span>
                         {matchLoading ? "Calculating..." : "Calculate Match"}
                       </button>
                       <p className="text-xs text-muted">
