@@ -207,7 +207,7 @@ export default function Home() {
           href="/pick-for-me"
           className="pointer-events-auto mt-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-5 py-2 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
         >
-          <span aria-hidden>🎲</span> Not sure what to watch? Pick for me
+          Not sure what to watch? Pick for me
         </Link>
       </div>
 

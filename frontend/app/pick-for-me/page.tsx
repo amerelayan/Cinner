@@ -191,7 +191,7 @@ export default function PickForMePage() {
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-20 pt-14 sm:px-6">
       <div className="text-center">
         <p className="font-display text-3xl tracking-wide text-foreground sm:text-4xl">
-          <span aria-hidden>🎲</span> Pick a Movie for Me
+          Pick a Movie for Me
         </p>
         <p className="mt-3 text-sm text-muted">
           Answer a few quick questions and we&apos;ll find something worth watching.
@@ -260,7 +260,7 @@ export default function PickForMePage() {
               onClick={handleSubmitQuiz}
               className={PRIMARY_BUTTON}
             >
-              🎬 Find My Movie
+              Find My Movie
             </button>
           </div>
         </div>
@@ -381,7 +381,7 @@ export default function PickForMePage() {
 
           <div className="mt-8 flex flex-col items-center gap-3">
             <button onClick={handleRegenerate} className={PRIMARY_BUTTON}>
-              🎲 Regenerate
+              Regenerate
             </button>
             <button
               onClick={handleChangeAnswers}
