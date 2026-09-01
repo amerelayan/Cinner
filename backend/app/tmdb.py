@@ -4,6 +4,8 @@ import os
 
 import httpx
 
+from app.omdb import fetch_ratings as fetch_omdb_ratings
+
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
@@ -112,6 +114,10 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
         "vote_count": data.get("vote_count"),
         "popularity": data.get("popularity"),
         "tmdb_rating": data.get("vote_average"),
+        # TMDB's own cross-reference to IMDb, already present on every movie
+        # details response — used to look up real IMDb/Rotten Tomatoes scores
+        # via OMDb without any fuzzy title/year matching.
+        "imdb_id": data.get("imdb_id"),
     }
 
 
@@ -165,6 +171,8 @@ async def fetch_discover_by_genres(
     vote_count_gte: int = 100,
     vote_count_lte: int | None = None,
     vote_average_gte: float | None = None,
+    release_date_gte: str | None = None,
+    release_date_lte: str | None = None,
 ) -> list[dict]:
     """Lets TMDB do the broad filtering (genre, vote-count band) server-side,
     so our own scoring only has to rank an already-relevant candidate pool
@@ -184,6 +192,10 @@ async def fetch_discover_by_genres(
         params["vote_count.lte"] = vote_count_lte
     if vote_average_gte is not None:
         params["vote_average.gte"] = vote_average_gte
+    if release_date_gte is not None:
+        params["primary_release_date.gte"] = release_date_gte
+    if release_date_lte is not None:
+        params["primary_release_date.lte"] = release_date_lte
     return await _fetch_movie_list("/discover/movie", params=params)
 
 
@@ -204,6 +216,7 @@ async def fetch_movie_basic(tmdb_id: int) -> dict:
         "release_date": data.get("release_date") or None,
         "poster_path": data.get("poster_path"),
         "tmdb_rating": data.get("vote_average") or None,
+        "imdb_id": data.get("imdb_id"),
     }
 
 
@@ -213,13 +226,15 @@ async def ensure_movie_cached(conn, tmdb_id: int) -> None:
         return
 
     movie = await fetch_movie_details(tmdb_id)
+    ratings = await fetch_omdb_ratings(movie["imdb_id"])
 
     await conn.execute(
         """
         INSERT INTO public.movies
             (id, title, release_date, poster_path, synopsis, director, genres, main_cast, language,
-             runtime_minutes, keywords, vote_count, popularity, tmdb_rating)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             runtime_minutes, keywords, vote_count, popularity, tmdb_rating, imdb_id, imdb_rating,
+             rotten_tomatoes_rating)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO NOTHING
         """,
         movie["id"],
@@ -236,6 +251,9 @@ async def ensure_movie_cached(conn, tmdb_id: int) -> None:
         movie["vote_count"],
         movie["popularity"],
         movie["tmdb_rating"],
+        movie["imdb_id"],
+        ratings["imdb_rating"],
+        ratings["rotten_tomatoes_rating"],
     )
 
 
@@ -271,13 +289,22 @@ async def ensure_movies_cached_bulk(pool, tmdb_ids: list[int]) -> None:
     if not movies:
         return
 
+    ratings_results = await asyncio.gather(
+        *(fetch_omdb_ratings(movie["imdb_id"]) for movie in movies), return_exceptions=True
+    )
+    empty_ratings = {"imdb_rating": None, "rotten_tomatoes_rating": None}
+    ratings_list = [
+        r if not isinstance(r, BaseException) else empty_ratings for r in ratings_results
+    ]
+
     async with pool.acquire() as conn:
         await conn.executemany(
             """
             INSERT INTO public.movies
                 (id, title, release_date, poster_path, synopsis, director, genres, main_cast, language,
-                 runtime_minutes, keywords, vote_count, popularity, tmdb_rating)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 runtime_minutes, keywords, vote_count, popularity, tmdb_rating, imdb_id, imdb_rating,
+                 rotten_tomatoes_rating)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             ON CONFLICT (id) DO NOTHING
             """,
             [
@@ -296,7 +323,10 @@ async def ensure_movies_cached_bulk(pool, tmdb_ids: list[int]) -> None:
                     movie["vote_count"],
                     movie["popularity"],
                     movie["tmdb_rating"],
+                    movie["imdb_id"],
+                    ratings["imdb_rating"],
+                    ratings["rotten_tomatoes_rating"],
                 )
-                for movie in movies
+                for movie, ratings in zip(movies, ratings_list)
             ],
         )

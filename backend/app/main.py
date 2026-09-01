@@ -15,11 +15,14 @@ from pydantic import BaseModel, field_validator
 from app.auth import get_current_user, get_optional_user
 from app.featured import get_featured_pool, pick_random_featured
 from app.movie_lists import get_popular_movies, get_top_rated_movies, get_trending_movies
+from app.omdb import fetch_ratings as fetch_omdb_ratings
 from app.recommendations.foryou import build_for_you
+from app.recommendations.pickforme import pick_movies
 from app.recommendations.score import compute_match_percentage, explain_match, predict_rating
 from app.recommendations.taste import gather_user_taste, get_reference_movies
 from app.recommendations.vectorize import vectorize_movie
 from app.tmdb import (
+    GENRE_NAME_TO_TMDB_ID,
     VALID_GENRES,
     MovieNotFoundError,
     ensure_movie_cached,
@@ -160,7 +163,7 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
             """
             SELECT id AS tmdb_id, title, release_date, poster_path, synopsis, director,
                    genres, main_cast, language, runtime_minutes,
-                   imdb_rating, rotten_tomatoes_rating, letterboxd_rating
+                   imdb_rating, rotten_tomatoes_rating
             FROM public.movies WHERE id = $1
             """,
             tmdb_id,
@@ -174,6 +177,8 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
             except (httpx.HTTPStatusError, httpx.RequestError):
                 raise HTTPException(status_code=502, detail="TMDB is currently unavailable")
 
+            ratings = await fetch_omdb_ratings(details["imdb_id"])
+
             return {
                 "tmdb_id": details["id"],
                 "title": details["title"],
@@ -185,9 +190,8 @@ async def get_movie(tmdb_id: int, user: dict | None = Depends(get_optional_user)
                 "main_cast": details["main_cast"],
                 "language": details["language"],
                 "runtime_minutes": details["runtime_minutes"],
-                "imdb_rating": None,
-                "rotten_tomatoes_rating": None,
-                "letterboxd_rating": None,
+                "imdb_rating": ratings["imdb_rating"],
+                "rotten_tomatoes_rating": ratings["rotten_tomatoes_rating"],
                 "cinner_average_rating": None,
                 "cinner_ratings_count": 0,
                 "your_rating": None,
@@ -236,7 +240,7 @@ async def calculate_match(tmdb_id: int, user: dict = Depends(get_current_user)):
         movie_row = await conn.fetchrow(
             """
             SELECT id, title, genres, main_cast, director, language, release_date,
-                   runtime_minutes, vote_count, popularity, tmdb_rating, keywords
+                   runtime_minutes, vote_count, popularity, tmdb_rating, imdb_rating, keywords
             FROM public.movies WHERE id = $1
             """,
             tmdb_id,
@@ -655,3 +659,39 @@ async def update_imdb_top_250_preference(
             user["sub"],
         )
     return {"prefers_imdb_top_250": payload.prefers_imdb_top_250}
+
+
+class PickForMeRequest(BaseModel):
+    genres: list[str]
+    age_preference: str
+    prefers_imdb_top_250: bool
+
+    @field_validator("genres")
+    @classmethod
+    def validate_genres(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("at least one genre must be selected")
+        invalid = sorted(set(value) - set(VALID_GENRES))
+        if invalid:
+            raise ValueError(f"invalid genres: {invalid}")
+        return value
+
+    @field_validator("age_preference")
+    @classmethod
+    def validate_age_preference(cls, value: str) -> str:
+        if value not in VALID_AGE_PREFERENCES:
+            raise ValueError(f"age_preference must be one of {VALID_AGE_PREFERENCES}")
+        return value
+
+
+@app.post("/pick-for-me")
+async def pick_for_me(payload: PickForMeRequest, user: dict | None = Depends(get_optional_user)):
+    genre_ids = [GENRE_NAME_TO_TMDB_ID[g] for g in payload.genres]
+    movies = await pick_movies(
+        app.state.pool,
+        genre_ids,
+        payload.age_preference,
+        payload.prefers_imdb_top_250,
+        user["sub"] if user else None,
+    )
+    return {"movies": movies}

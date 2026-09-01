@@ -37,6 +37,9 @@ export default function NavBar() {
           <Link href="/search" className={NAV_LINK}>
             MOVIES
           </Link>
+          <Link href="/pick-for-me" className={NAV_LINK}>
+            PICK FOR ME
+          </Link>
           {loggedIn && (
             <>
               <Link href="/for-you" className={NAV_LINK}>

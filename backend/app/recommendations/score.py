@@ -35,12 +35,16 @@ QUALITY_PRIOR_VOTE_WEIGHT = 200.0
 def _quality_anchor(movie: dict) -> float:
     """The movie's own worldwide reception, independent of any one user's
     taste — used to keep Predicted Rating grounded in reality, especially
-    when we don't yet have enough personal data to trust a learned model."""
-    tmdb_rating = float(movie.get("tmdb_rating") or 0)
+    when we don't yet have enough personal data to trust a learned model.
+    Prefers the real IMDb rating (via OMDb) when we have it, since it's a
+    more widely-trusted "is this actually good" signal than TMDB's own —
+    falling back to TMDB's rating for movies OMDb has no match for."""
+    imdb_rating = movie.get("imdb_rating")
+    rating = float(imdb_rating) if imdb_rating else float(movie.get("tmdb_rating") or 0)
     vote_count = float(movie.get("vote_count") or 0)
-    if tmdb_rating <= 0:
+    if rating <= 0:
         return QUALITY_PRIOR_MEAN
-    return (vote_count * tmdb_rating + QUALITY_PRIOR_VOTE_WEIGHT * QUALITY_PRIOR_MEAN) / (
+    return (vote_count * rating + QUALITY_PRIOR_VOTE_WEIGHT * QUALITY_PRIOR_MEAN) / (
         vote_count + QUALITY_PRIOR_VOTE_WEIGHT
     )
 
@@ -164,10 +168,11 @@ def explain_match(movie: dict, profile: dict, reference_movies: list[dict]) -> l
             reasons.append(f"Features {sorted(shared_cast)[0]}, also in {ref['title']}")
             break
 
+    acclaimed_rating = movie.get("imdb_rating") or movie.get("tmdb_rating")
     if (
         profile.get("prefers_imdb_top_250")
         and (movie.get("vote_count") or 0) >= 5000
-        and float(movie.get("tmdb_rating") or 0) >= 7.5
+        and float(acclaimed_rating or 0) >= 7.5
     ):
         reasons.append("A widely acclaimed classic, matching your love of critically-rated films")
 

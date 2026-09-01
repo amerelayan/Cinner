@@ -29,6 +29,16 @@ from app.tmdb import (
 SECTION_SIZE = 8
 DEFAULT_GENRE_IDS = list(GENRE_NAME_TO_TMDB_ID.values())[:3]
 
+# "Highest Match" and "Rate Highly" are meant to be movies worth actually
+# watching, not just movies that share genre/cast/era patterns with your
+# taste — Match % alone can't tell a beloved classic from a widely-seen dud
+# that happens to overlap on paper, since TMDB rating is only 1 of 114
+# vector dimensions and gets drowned out by the ~64 hashed cast/keyword
+# dimensions. A hard floor keeps genuinely poorly-reviewed movies out of
+# these two sections entirely, rather than just ranking them lower.
+HIGHEST_MATCH_MIN_RATING = 6.0
+HIGHEST_MATCH_MIN_VOTES = 200
+
 
 async def _score_pool(
     pool,
@@ -56,7 +66,7 @@ async def _score_pool(
         rows = await conn.fetch(
             """
             SELECT id, title, release_date, poster_path, genres, main_cast, director,
-                   language, runtime_minutes, vote_count, popularity, tmdb_rating, keywords
+                   language, runtime_minutes, vote_count, popularity, tmdb_rating, imdb_rating, keywords
             FROM public.movies WHERE id = ANY($1::int[])
             """,
             candidate_ids,
@@ -76,6 +86,9 @@ async def _score_pool(
                 "poster_path": movie["poster_path"],
                 "match_pct": match_pct,
                 "predicted_rating": predicted_rating,
+                "tmdb_rating": movie["tmdb_rating"],
+                "imdb_rating": movie["imdb_rating"],
+                "vote_count": movie["vote_count"],
             }
         )
 
@@ -169,7 +182,11 @@ async def build_for_you(pool, user_id: str) -> dict:
     # the same fix that took the homepage's poster wall from ~9s to ~2s,
     # applied one level up.
     genre_pool, hidden_gems_pool, favorite_recs_lists, seed_recs = await asyncio.gather(
-        fetch_discover_by_genres(preferred_genre_ids, vote_count_gte=200),
+        fetch_discover_by_genres(
+            preferred_genre_ids,
+            vote_count_gte=HIGHEST_MATCH_MIN_VOTES,
+            vote_average_gte=HIGHEST_MATCH_MIN_RATING,
+        ),
         fetch_discover_by_genres(
             preferred_genre_ids, vote_count_gte=50, vote_count_lte=2000, vote_average_gte=6.5
         ),
@@ -200,8 +217,20 @@ async def build_for_you(pool, user_id: str) -> dict:
             if existing is None or movie["match_pct"] > existing["match_pct"]:
                 combined[movie["tmdb_id"]] = movie
 
-    highest_match = sorted(combined.values(), key=lambda m: m["match_pct"], reverse=True)[:SECTION_SIZE]
-    rate_highly = sorted(combined.values(), key=lambda m: m["predicted_rating"], reverse=True)[:SECTION_SIZE]
+    # Movies sourced via TMDB's own /recommendations (favorite_recs, seed_recs)
+    # can't be pre-filtered by rating server-side the way the genre-discover
+    # pool can, so the floor is enforced here too, uniformly across every
+    # source, right before ranking these two specific sections. Prefers the
+    # real IMDb rating (via OMDb) when we have it, over TMDB's own.
+    quality_pool = [
+        m
+        for m in combined.values()
+        if (m["imdb_rating"] or m["tmdb_rating"] or 0) >= HIGHEST_MATCH_MIN_RATING
+        and (m["vote_count"] or 0) >= HIGHEST_MATCH_MIN_VOTES
+    ]
+
+    highest_match = sorted(quality_pool, key=lambda m: m["match_pct"], reverse=True)[:SECTION_SIZE]
+    rate_highly = sorted(quality_pool, key=lambda m: m["predicted_rating"], reverse=True)[:SECTION_SIZE]
 
     return {
         "highest_match": highest_match,

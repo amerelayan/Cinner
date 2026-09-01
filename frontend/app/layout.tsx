@@ -30,6 +30,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${archivoBlack.variable} h-full antialiased`}
     >
+      <head>
+        {/* Opens the connection to TMDB's poster CDN before the first
+            <img> tag is even created, so the homepage's floating posters
+            aren't each paying DNS+TCP+TLS setup time on top of the fetch. */}
+        <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://image.tmdb.org" />
+      </head>
       <body className="min-h-full flex flex-col">
         <NavBar />
         <div className="flex flex-1 flex-col">{children}</div>

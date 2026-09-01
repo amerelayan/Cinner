@@ -1,6 +1,7 @@
 import asyncio
 import random
 
+from app.omdb import fetch_ratings as fetch_omdb_ratings
 from app.tmdb import fetch_movie_basic
 
 # A curated pool of ~100 iconic, widely-recognizable movies spanning multiple decades
@@ -22,6 +23,13 @@ FEATURED_MOVIE_IDS = [
 
 _pool_cache: list[dict] | None = None
 _pool_lock = asyncio.Lock()
+
+# Below this, a fetch attempt is treated as failed rather than cached — a
+# transient TMDB error (rate limit, network blip) hitting most of the ~100
+# concurrent calls would otherwise get permanently cached as a near-empty
+# pool for the rest of the process's lifetime, with no way to recover short
+# of a restart.
+MIN_VIABLE_POOL_SIZE = 20
 
 
 async def get_featured_pool() -> list[dict]:
@@ -48,6 +56,19 @@ async def get_featured_pool() -> list[dict]:
             return_exceptions=True,
         )
         movies = [r for r in results if not isinstance(r, Exception)]
+        if len(movies) < MIN_VIABLE_POOL_SIZE:
+            return movies
+
+        # Real IMDb rating, preferred over TMDB's own — same one-time cost as
+        # the rest of this pool, paid once per process lifetime rather than
+        # per homepage visit.
+        ratings_results = await asyncio.gather(
+            *(fetch_omdb_ratings(movie["imdb_id"]) for movie in movies), return_exceptions=True
+        )
+        for movie, ratings in zip(movies, ratings_results):
+            imdb_rating = None if isinstance(ratings, BaseException) else ratings["imdb_rating"]
+            movie["imdb_rating"] = imdb_rating if imdb_rating is not None else movie["tmdb_rating"]
+
         _pool_cache = movies
         return _pool_cache
 

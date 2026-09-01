@@ -21,7 +21,6 @@ type MovieDetail = {
   runtime_minutes: number | null;
   imdb_rating: number | null;
   rotten_tomatoes_rating: number | null;
-  letterboxd_rating: number | null;
   cinner_average_rating: number | null;
   cinner_ratings_count: number;
   your_rating: number | null;
@@ -216,7 +215,6 @@ export default function MovieDetailPage() {
           <div className="mt-5 flex flex-wrap gap-3">
             <RatingBadge source="imdb" value={movie.imdb_rating} suffix="/10" />
             <RatingBadge source="rt" value={movie.rotten_tomatoes_rating} suffix="%" />
-            <RatingBadge source="letterboxd" value={movie.letterboxd_rating} suffix="/5" />
             <RatingBadge
               source="cinner"
               value={movie.cinner_average_rating}

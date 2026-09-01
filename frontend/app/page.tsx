@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PosterWall from "@/components/PosterWall";
 import FilmReelIcon from "@/components/FilmReelIcon";
@@ -11,7 +12,7 @@ type FeaturedMovie = {
   title: string;
   release_date: string | null;
   poster_path: string | null;
-  tmdb_rating: number | null;
+  imdb_rating: number | null;
   watched: boolean;
   in_watchlist: boolean;
 };
@@ -201,6 +202,13 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        <Link
+          href="/pick-for-me"
+          className="pointer-events-auto mt-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-5 py-2 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
+        >
+          <span aria-hidden>🎲</span> Not sure what to watch? Pick for me
+        </Link>
       </div>
 
       <footer className="pointer-events-none relative z-20 w-full border-t border-border bg-background px-4 py-6 text-center text-xs tracking-wide text-muted">

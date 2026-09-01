@@ -9,7 +9,7 @@ type FeaturedMovie = {
   title: string;
   release_date: string | null;
   poster_path: string | null;
-  tmdb_rating: number | null;
+  imdb_rating: number | null;
   watched: boolean;
   in_watchlist: boolean;
 };
@@ -156,6 +156,8 @@ export default function PosterWall({
                     alt={movie.title}
                     className="block w-full"
                     draggable={false}
+                    loading="eager"
+                    fetchPriority="high"
                   />
                 ) : (
                   <div className="flex aspect-[2/3] w-full items-center justify-center bg-surface text-xs text-muted">
@@ -171,8 +173,8 @@ export default function PosterWall({
                     <p className="mt-0.5 text-[11px] text-muted">
                       {year ?? "—"}
                       {" · "}
-                      {movie.tmdb_rating ? (
-                        <span className="text-accent">★ {movie.tmdb_rating.toFixed(1)}</span>
+                      {movie.imdb_rating ? (
+                        <span className="text-accent">★ {movie.imdb_rating.toFixed(1)}</span>
                       ) : (
                         "—"
                       )}

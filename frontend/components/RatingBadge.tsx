@@ -1,9 +1,8 @@
-type Source = "imdb" | "rt" | "letterboxd" | "cinner";
+type Source = "imdb" | "rt" | "cinner";
 
 const CONFIG: Record<Source, { label: string; color: string; bg: string }> = {
   imdb: { label: "IMDb", color: "#0a0908", bg: "#f5c518" },
   rt: { label: "RT", color: "#ffffff", bg: "#fa320a" },
-  letterboxd: { label: "LB", color: "#ffffff", bg: "#00a651" },
   cinner: { label: "Cinner", color: "#ffffff", bg: "var(--accent)" },
 };
 
@@ -14,16 +13,6 @@ function SourceIcon({ source }: { source: Source }) {
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
         <path d="M11 4c.5-1.2 1.8-2 3-1.7-.3 1-1.1 1.7-2 2" stroke="#3a7d33" strokeWidth="1.5" strokeLinecap="round" />
         <circle cx="12" cy="13" r="8" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (source === "letterboxd") {
-    // A plain ticket shape, not Letterboxd's actual three-circle logo mark.
-    return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
-        <rect x="2" y="7" width="20" height="10" rx="2" fill="currentColor" />
-        <circle cx="8" cy="12" r="1.4" fill="var(--surface)" />
-        <circle cx="16" cy="12" r="1.4" fill="var(--surface)" />
       </svg>
     );
   }
