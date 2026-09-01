@@ -110,9 +110,12 @@ export default function PosterWall({
               zIndex: isHovered ? 30 : 1,
             }}
           >
-            {/* Outer element owns the floating animation (translate/rotate). Also
-                the positioning root for the tracking icons below, so their hover
-                tooltip isn't clipped by the poster's own overflow-hidden border. */}
+            {/* Outer element owns the floating animation (translate/rotate) and the
+                hover tracking — moved here (rather than the inner bordered div) so
+                that hovering over the tracking-icon overlay below, a sibling of that
+                div, doesn't register as the cursor leaving the poster. Also the
+                positioning root for those icons, so their hover tooltip isn't
+                clipped by the poster's own overflow-hidden border. */}
             <div
               className="relative poster-float"
               style={
@@ -129,6 +132,8 @@ export default function PosterWall({
                   animationPlayState: isHovered ? "paused" : "running",
                 } as React.CSSProperties
               }
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
             >
               {/* Inner element owns the hover scale, since a CSS animation and an
                   inline transform can't both target `transform` on the same element. */}
@@ -143,8 +148,6 @@ export default function PosterWall({
                     : "0 8px 20px rgba(0,0,0,0.5)",
                   transition: "filter 300ms, border-color 300ms, box-shadow 300ms, transform 300ms",
                 }}
-                onMouseEnter={() => setHovered(i)}
-                onMouseLeave={() => setHovered(null)}
                 onClick={() => router.push(`/movies/${movie.tmdb_id}`)}
               >
                 {movie.poster_path ? (

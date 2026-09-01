@@ -58,7 +58,7 @@ export default function TrackButton({
   return (
     <button
       onClick={onClick}
-      className={`group relative flex ${s.button} items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-accent hover:text-accent`}
+      className={`group relative flex ${s.button} items-center justify-center rounded-full border border-border bg-black/70 text-foreground shadow-md transition-colors hover:border-accent hover:text-accent`}
       style={active ? { color: "var(--accent)", borderColor: "var(--accent)" } : undefined}
     >
       {icon === "eye" ? (
