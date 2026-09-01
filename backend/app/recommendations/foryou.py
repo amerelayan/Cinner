@@ -10,6 +10,7 @@ relevant pool rather than TMDB's entire catalog.
 """
 
 import asyncio
+from collections import Counter
 
 from app.recommendations.score import (
     compute_match_percentage,
@@ -86,7 +87,7 @@ async def build_for_you(pool, user_id: str) -> dict:
     async with pool.acquire() as conn:
         favorites = await conn.fetch(
             """
-            SELECT f.movie_id, m.title FROM public.favorites f
+            SELECT f.movie_id, m.title, m.genres FROM public.favorites f
             JOIN public.movies m ON m.id = f.movie_id
             WHERE f.user_id = $1 ORDER BY f.created_at
             """,
@@ -97,6 +98,14 @@ async def build_for_you(pool, user_id: str) -> dict:
             SELECT r.movie_id, m.title FROM public.ratings r
             JOIN public.movies m ON m.id = r.movie_id
             WHERE r.user_id = $1 ORDER BY r.rating DESC LIMIT 1
+            """,
+            user_id,
+        )
+        highly_rated_genres = await conn.fetch(
+            """
+            SELECT m.genres FROM public.ratings r
+            JOIN public.movies m ON m.id = r.movie_id
+            WHERE r.user_id = $1 AND r.rating >= 7
             """,
             user_id,
         )
@@ -117,11 +126,33 @@ async def build_for_you(pool, user_id: str) -> dict:
 
     model = fit_rating_model(rated_movies)
 
-    preferred_genre_ids = [
+    # The candidate pool for "Highest Match"/"Hidden Gems" comes from TMDB
+    # /discover filtered by genre, so it has to reflect what the user
+    # actually likes right now — not just the genres they picked once during
+    # onboarding. Otherwise a taste vector that has since shifted (e.g. new
+    # favorites in a genre outside the original onboarding picks) can score a
+    # movie highly via /match while that same movie never even enters the
+    # discover pool these sections rank from. We count genres across current
+    # favorites and highly-rated movies, and put those ahead of the
+    # onboarding preference (which still matters for someone with few/no
+    # favorites yet).
+    genre_counts: Counter = Counter()
+    for row in favorites:
+        for g in row["genres"] or []:
+            genre_counts[g] += 1
+    for row in highly_rated_genres:
+        for g in row["genres"] or []:
+            genre_counts[g] += 1
+
+    taste_genre_ids = [
+        GENRE_NAME_TO_TMDB_ID[g] for g, _ in genre_counts.most_common(4) if g in GENRE_NAME_TO_TMDB_ID
+    ]
+    onboarding_genre_ids = [
         GENRE_NAME_TO_TMDB_ID[g]
         for g in ((profile["preferred_genres"] if profile else None) or [])
         if g in GENRE_NAME_TO_TMDB_ID
-    ] or DEFAULT_GENRE_IDS
+    ]
+    preferred_genre_ids = list(dict.fromkeys(taste_genre_ids + onboarding_genre_ids)) or DEFAULT_GENRE_IDS
 
     # "Because you liked X" seeds from their single highest-rated movie, or —
     # for someone who hasn't rated anything yet — their first favorite, so
@@ -147,13 +178,30 @@ async def build_for_you(pool, user_id: str) -> dict:
     )
     favorite_recs = [movie for recs in favorite_recs_lists for movie in recs]
 
-    highest_match, based_on_favorites, because_you_liked, hidden_gems = await asyncio.gather(
+    genre_scored, based_on_favorites, because_you_liked, hidden_gems = await asyncio.gather(
         _score_pool(pool, genre_pool, exclude_ids, taste_vector, rated_movies, model),
         _score_pool(pool, favorite_recs, exclude_ids, taste_vector, rated_movies, model),
         _score_pool(pool, seed_recs, exclude_ids, taste_vector, rated_movies, model),
         _score_pool(pool, hidden_gems_pool, exclude_ids, taste_vector, rated_movies, model),
     )
-    rate_highly = sorted(highest_match, key=lambda m: m["predicted_rating"], reverse=True)[:SECTION_SIZE]
+
+    # "Highest Match" and "Rate Highly" are meant to surface the single best
+    # score across everything scored this page load — not just the
+    # genre-discover pool. That pool alone is popularity-sorted and only one
+    # page deep, so it systematically misses movies that TMDB's own
+    # per-favorite recommendations surface instead (e.g. an older sequel a
+    # fan of the original would love, but that isn't "trending" right now).
+    # We merge every already-scored pool and re-rank, so a high match found
+    # via any source can appear here.
+    combined: dict[int, dict] = {}
+    for scored in (genre_scored, based_on_favorites, because_you_liked, hidden_gems):
+        for movie in scored:
+            existing = combined.get(movie["tmdb_id"])
+            if existing is None or movie["match_pct"] > existing["match_pct"]:
+                combined[movie["tmdb_id"]] = movie
+
+    highest_match = sorted(combined.values(), key=lambda m: m["match_pct"], reverse=True)[:SECTION_SIZE]
+    rate_highly = sorted(combined.values(), key=lambda m: m["predicted_rating"], reverse=True)[:SECTION_SIZE]
 
     return {
         "highest_match": highest_match,

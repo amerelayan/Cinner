@@ -62,9 +62,9 @@ function MovieCard({
       </Link>
 
       {showTracking && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative flex gap-2">
+          <div className="relative flex gap-2 pointer-events-auto">
             <TrackButton
               icon="eye"
               active={movie.watched}

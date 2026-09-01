@@ -168,9 +168,14 @@ async def fetch_discover_by_genres(
 ) -> list[dict]:
     """Lets TMDB do the broad filtering (genre, vote-count band) server-side,
     so our own scoring only has to rank an already-relevant candidate pool
-    rather than TMDB's entire catalog."""
+    rather than TMDB's entire catalog. Genres are OR'd together (TMDB's "|"
+    separator) rather than AND'd ("," would require every genre to match at
+    once) — the goal is "movies matching any genre this user likes," not
+    "movies that are simultaneously every one of these genres," which for a
+    varied taste (e.g. both Crime and Science Fiction) would return almost
+    nothing."""
     params = {
-        "with_genres": ",".join(str(g) for g in genre_ids),
+        "with_genres": "|".join(str(g) for g in genre_ids),
         "sort_by": "popularity.desc",
         "vote_count.gte": vote_count_gte,
         "include_adult": "false",
