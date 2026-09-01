@@ -59,7 +59,26 @@ def _rating_weight(rating: float) -> float:
     return (rating - 5.5) / 4.5
 
 
-def _encode_preferences(profile: dict) -> np.ndarray:
+
+# A user whose actual favorites/high ratings average well above this (on the
+# real-world, IMDb-preferred rating scale) is treated as prestige-sensitive
+# even if they never said so during onboarding — taste can outgrow a single
+# yes/no answer given once at signup, and behavior is stronger evidence than
+# a stated preference. QUALITY_PRIOR_MEAN (score.py) uses 6.5 as a neutral
+# population baseline; this sits well above that on purpose, so an ordinary
+# mix of decent-and-great movies doesn't trigger it — only a real skew toward
+# acclaimed titles does.
+PRESTIGE_RATING_THRESHOLD = 7.8
+MIN_ENGAGED_MOVIES_FOR_PRESTIGE = 3
+
+
+def _has_prestige_affinity(engaged_ratings: list[float]) -> bool:
+    if len(engaged_ratings) < MIN_ENGAGED_MOVIES_FOR_PRESTIGE:
+        return False
+    return (sum(engaged_ratings) / len(engaged_ratings)) >= PRESTIGE_RATING_THRESHOLD
+
+
+def _encode_preferences(profile: dict, prestige_affinity: bool = False) -> np.ndarray:
     """Turns the onboarding answers into a vector in the same space as a real
     movie, so they blend into the taste vector like any other signal, just
     with their own weight."""
@@ -70,11 +89,12 @@ def _encode_preferences(profile: dict) -> np.ndarray:
     if recency is not None:
         vector[NUMERIC_START] = recency  # numeric block position 0 = release year
 
-    if profile.get("prefers_imdb_top_250"):
+    if profile.get("prefers_imdb_top_250") or prestige_affinity:
         # Numeric block positions 2 and 4 are vote_count and tmdb_rating — a
-        # stated taste for acclaimed classics nudges toward high-vote,
-        # high-rating movies. Left neutral (not penalized) when False, since
-        # "no" just means it isn't a stated priority, not that they dislike them.
+        # taste for acclaimed classics (stated at onboarding, or shown
+        # empirically since) nudges toward high-vote, high-rating movies.
+        # Left neutral (not penalized) otherwise, since neither "no" nor no
+        # evidence yet means they dislike acclaimed movies.
         vector[NUMERIC_START + 2] = 0.9
         vector[NUMERIC_START + 4] = 0.9
 
@@ -109,7 +129,10 @@ async def _fetch_user_interactions(conn, user_id: str) -> dict:
 
 
 def _build_taste_vector(
-    interactions: dict, movie_vectors: dict[int, np.ndarray], profile: dict | None
+    interactions: dict,
+    movie_vectors: dict[int, np.ndarray],
+    profile: dict | None,
+    prestige_affinity: bool = False,
 ) -> np.ndarray:
     weighted_vectors: list[tuple[np.ndarray, float]] = []
     rated_ids = set(interactions["ratings"])
@@ -133,7 +156,7 @@ def _build_taste_vector(
             weighted_vectors.append((movie_vectors[movie_id], WATCHLIST_WEIGHT))
 
     if profile is not None:
-        weighted_vectors.append((_encode_preferences(profile), PREFERENCE_WEIGHT))
+        weighted_vectors.append((_encode_preferences(profile, prestige_affinity), PREFERENCE_WEIGHT))
 
     if not weighted_vectors:
         return np.zeros(VECTOR_DIMS)
@@ -172,18 +195,33 @@ async def gather_user_taste(
         | interactions["watchlist"]
     )
     movie_vectors: dict[int, np.ndarray] = {}
+    quality_by_id: dict[int, float] = {}
     if all_ids:
         rows = await conn.fetch(
             """
             SELECT id, genres, main_cast, director, language, release_date,
-                   runtime_minutes, vote_count, popularity, tmdb_rating, keywords
+                   runtime_minutes, vote_count, popularity, tmdb_rating, imdb_rating, keywords
             FROM public.movies WHERE id = ANY($1::int[])
             """,
             list(all_ids),
         )
         movie_vectors = {r["id"]: vectorize_movie(dict(r)) for r in rows}
+        quality_by_id = {
+            r["id"]: float(r["imdb_rating"] or r["tmdb_rating"] or 0)
+            for r in rows
+            if r["imdb_rating"] or r["tmdb_rating"]
+        }
 
-    taste_vector = _build_taste_vector(interactions, movie_vectors, profile)
+    # Real-world quality of the movies this person actually loved (favorited,
+    # or rated 7+) — evidence of prestige-sensitivity independent of whatever
+    # they answered once at onboarding. See _has_prestige_affinity.
+    engaged_ids = interactions["favorites"] | {
+        movie_id for movie_id, rating in interactions["ratings"].items() if rating >= 7
+    }
+    engaged_ratings = [quality_by_id[i] for i in engaged_ids if i in quality_by_id]
+    prestige_affinity = _has_prestige_affinity(engaged_ratings)
+
+    taste_vector = _build_taste_vector(interactions, movie_vectors, profile, prestige_affinity)
     rated_movies = [
         (movie_vectors[movie_id], rating)
         for movie_id, rating in interactions["ratings"].items()
