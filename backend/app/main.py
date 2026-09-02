@@ -52,9 +52,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cinner API", lifespan=lifespan)
 
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "http://localhost:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[ALLOWED_ORIGIN],
     allow_methods=["*"],
     allow_headers=["*"],
 )

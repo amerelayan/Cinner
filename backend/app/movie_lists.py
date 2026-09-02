@@ -1,6 +1,9 @@
 import asyncio
 import time
 
+import httpx
+from fastapi import HTTPException
+
 from app.tmdb import fetch_popular_movies, fetch_top_rated_movies, fetch_trending_movies
 
 _TTL_SECONDS = 3600
@@ -24,7 +27,10 @@ class _CachedList:
             now = time.monotonic()
             if self._cache is not None and (now - self._cache_time) < _TTL_SECONDS:
                 return self._cache
-            self._cache = await self._fetch()
+            try:
+                self._cache = await self._fetch()
+            except (httpx.HTTPStatusError, httpx.RequestError):
+                raise HTTPException(status_code=502, detail="TMDB is currently unavailable")
             self._cache_time = now
             return self._cache
 

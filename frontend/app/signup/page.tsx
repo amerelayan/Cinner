@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function SignupPage() {
       return;
     }
 
-    const res = await fetch("http://localhost:8000/profile", {
+    const res = await fetch(`${API_BASE_URL}/profile`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

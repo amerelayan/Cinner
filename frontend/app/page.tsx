@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import PosterWall from "@/components/PosterWall";
 import FilmReelIcon from "@/components/FilmReelIcon";
 import { getAccessToken } from "@/lib/supabaseClient";
+import { API_BASE_URL } from "@/lib/api";
 
 type FeaturedMovie = {
   tmdb_id: number;
@@ -50,7 +51,7 @@ export default function Home() {
       const headers: Record<string, string> = {};
       if (t) headers.Authorization = `Bearer ${t}`;
       try {
-        const res = await fetch("http://localhost:8000/movies/featured", { headers });
+        const res = await fetch(`${API_BASE_URL}/movies/featured`, { headers });
         const data = res.ok ? await res.json() : { movies: [] };
         setMovies(data.movies ?? []);
       } catch {
@@ -69,11 +70,11 @@ export default function Home() {
     const wasWatched = movie.watched;
     patchMovie(movie.tmdb_id, { watched: !wasWatched });
     const res = wasWatched
-      ? await fetch(`http://localhost:8000/watched/${movie.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watched/${movie.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watched", {
+      : await fetch(`${API_BASE_URL}/watched`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
@@ -86,11 +87,11 @@ export default function Home() {
     const wasInWatchlist = movie.in_watchlist;
     patchMovie(movie.tmdb_id, { in_watchlist: !wasInWatchlist });
     const res = wasInWatchlist
-      ? await fetch(`http://localhost:8000/watchlist/${movie.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watchlist/${movie.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watchlist", {
+      : await fetch(`${API_BASE_URL}/watchlist`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
@@ -105,7 +106,7 @@ export default function Home() {
     }
     const timeout = setTimeout(async () => {
       const res = await fetch(
-        `http://localhost:8000/movies/search?q=${encodeURIComponent(query)}`
+        `${API_BASE_URL}/movies/search?q=${encodeURIComponent(query)}`
       );
       if (!res.ok) return;
       const data = await res.json();

@@ -8,6 +8,7 @@ import RatingBadge from "@/components/RatingBadge";
 import TrackButton from "@/components/TrackButton";
 import StarRating from "@/components/StarRating";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type MovieDetail = {
   tmdb_id: number;
@@ -56,7 +57,7 @@ export default function MovieDetailPage() {
     const headers: Record<string, string> = {};
     if (currentToken) headers.Authorization = `Bearer ${currentToken}`;
 
-    const res = await fetch(`http://localhost:8000/movies/${tmdbId}`, { headers });
+    const res = await fetch(`${API_BASE_URL}/movies/${tmdbId}`, { headers });
     if (!res.ok) {
       setError("Failed to load movie.");
       return;
@@ -75,7 +76,7 @@ export default function MovieDetailPage() {
     setMessage("");
     const previous = movie.your_rating;
     setMovie({ ...movie, your_rating: rating });
-    const res = await fetch("http://localhost:8000/ratings", {
+    const res = await fetch(`${API_BASE_URL}/ratings`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ tmdb_id: Number(tmdbId), rating }),
@@ -94,7 +95,7 @@ export default function MovieDetailPage() {
     setMessage("");
     const previous = movie.your_rating;
     setMovie({ ...movie, your_rating: null });
-    const res = await fetch(`http://localhost:8000/ratings/${tmdbId}`, {
+    const res = await fetch(`${API_BASE_URL}/ratings/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -112,11 +113,11 @@ export default function MovieDetailPage() {
     const wasWatched = movie.watched;
     setMovie({ ...movie, watched: !wasWatched });
     const res = wasWatched
-      ? await fetch(`http://localhost:8000/watched/${tmdbId}`, {
+      ? await fetch(`${API_BASE_URL}/watched/${tmdbId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watched", {
+      : await fetch(`${API_BASE_URL}/watched`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
@@ -133,11 +134,11 @@ export default function MovieDetailPage() {
     const wasInWatchlist = movie.in_watchlist;
     setMovie({ ...movie, in_watchlist: !wasInWatchlist });
     const res = wasInWatchlist
-      ? await fetch(`http://localhost:8000/watchlist/${tmdbId}`, {
+      ? await fetch(`${API_BASE_URL}/watchlist/${tmdbId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watchlist", {
+      : await fetch(`${API_BASE_URL}/watchlist`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: Number(tmdbId) }),
@@ -152,7 +153,7 @@ export default function MovieDetailPage() {
     if (!token) return;
     setMatchLoading(true);
     setMatchError("");
-    const res = await fetch(`http://localhost:8000/movies/${tmdbId}/match`, {
+    const res = await fetch(`${API_BASE_URL}/movies/${tmdbId}/match`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     setMatchLoading(false);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/supabaseClient";
 import FavoritesPicker from "@/components/FavoritesPicker";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -70,9 +71,9 @@ export default function OnboardingPage() {
       setToken(t);
 
       const [favRes, profRes, genresRes] = await Promise.all([
-        fetch("http://localhost:8000/favorites", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("http://localhost:8000/profile", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("http://localhost:8000/genres"),
+        fetch(`${API_BASE_URL}/favorites`, { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(`${API_BASE_URL}/profile`, { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(`${API_BASE_URL}/genres`),
       ]);
 
       const favData = await favRes.json();
@@ -106,7 +107,7 @@ export default function OnboardingPage() {
     }
     const timeout = setTimeout(async () => {
       const res = await fetch(
-        `http://localhost:8000/movies/search?q=${encodeURIComponent(query)}`
+        `${API_BASE_URL}/movies/search?q=${encodeURIComponent(query)}`
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -119,7 +120,7 @@ export default function OnboardingPage() {
     if (!token) return;
     const removed = favorites.find((f) => f.tmdb_id === tmdbId);
     setFavorites((prev) => prev.filter((f) => f.tmdb_id !== tmdbId));
-    const res = await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
+    const res = await fetch(`${API_BASE_URL}/favorites/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -138,7 +139,7 @@ export default function OnboardingPage() {
       ...prev,
       { tmdb_id: movie.tmdb_id, title: movie.title, poster_path: movie.poster_path },
     ]);
-    const res = await fetch("http://localhost:8000/favorites", {
+    const res = await fetch(`${API_BASE_URL}/favorites`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
@@ -159,7 +160,7 @@ export default function OnboardingPage() {
   async function handleSubmitGenres() {
     if (!token || selectedGenres.length === 0) return;
     setError("");
-    const res = await fetch("http://localhost:8000/profile/genres", {
+    const res = await fetch(`${API_BASE_URL}/profile/genres`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ genres: selectedGenres }),
@@ -175,7 +176,7 @@ export default function OnboardingPage() {
   async function handleSubmitAge() {
     if (!token || !ageChoice) return;
     setError("");
-    const res = await fetch("http://localhost:8000/profile/age-preference", {
+    const res = await fetch(`${API_BASE_URL}/profile/age-preference`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ age_preference: ageChoice }),
@@ -191,7 +192,7 @@ export default function OnboardingPage() {
   async function handleSubmitImdbPreference(value: boolean) {
     if (!token) return;
     setError("");
-    const res = await fetch("http://localhost:8000/profile/imdb-top-250-preference", {
+    const res = await fetch(`${API_BASE_URL}/profile/imdb-top-250-preference`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ prefers_imdb_top_250: value }),

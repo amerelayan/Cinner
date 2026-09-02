@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import FavoritesPicker from "@/components/FavoritesPicker";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -26,7 +27,7 @@ export default function EditFavoritesPage() {
       setMessage("Please log in.");
       return;
     }
-    const res = await fetch("http://localhost:8000/favorites", {
+    const res = await fetch(`${API_BASE_URL}/favorites`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
@@ -48,7 +49,7 @@ export default function EditFavoritesPage() {
     }
     const timeout = setTimeout(async () => {
       const res = await fetch(
-        `http://localhost:8000/movies/search?q=${encodeURIComponent(query)}`
+        `${API_BASE_URL}/movies/search?q=${encodeURIComponent(query)}`
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -63,7 +64,7 @@ export default function EditFavoritesPage() {
     if (!token) return;
     const removed = favorites?.find((f) => f.tmdb_id === tmdbId);
     setFavorites((prev) => (prev ? prev.filter((f) => f.tmdb_id !== tmdbId) : prev));
-    const res = await fetch(`http://localhost:8000/favorites/${tmdbId}`, {
+    const res = await fetch(`${API_BASE_URL}/favorites/${tmdbId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -84,7 +85,7 @@ export default function EditFavoritesPage() {
         ? [...prev, { tmdb_id: movie.tmdb_id, title: movie.title, poster_path: movie.poster_path }]
         : prev
     );
-    const res = await fetch("http://localhost:8000/favorites", {
+    const res = await fetch(`${API_BASE_URL}/favorites`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

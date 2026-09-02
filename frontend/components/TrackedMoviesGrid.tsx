@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Movie = {
   tmdb_id: number;
@@ -35,7 +36,7 @@ export default function TrackedMoviesGrid({
         setError("Please log in to view this page.");
         return;
       }
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import TrackButton from "@/components/TrackButton";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Movie = {
   tmdb_id: number;
@@ -175,9 +176,9 @@ export default function SearchPage() {
       if (t) headers.Authorization = `Bearer ${t}`;
 
       const [trendingRes, topRatedRes, popularRes] = await Promise.all([
-        fetch("http://localhost:8000/movies/trending", { headers }),
-        fetch("http://localhost:8000/movies/top-rated", { headers }),
-        fetch("http://localhost:8000/movies/popular", { headers }),
+        fetch(`${API_BASE_URL}/movies/trending`, { headers }),
+        fetch(`${API_BASE_URL}/movies/top-rated`, { headers }),
+        fetch(`${API_BASE_URL}/movies/popular`, { headers }),
       ]);
       if (trendingRes.ok) setTrending((await trendingRes.json()).trending);
       if (topRatedRes.ok) setTopRated((await topRatedRes.json()).top_rated);
@@ -196,7 +197,7 @@ export default function SearchPage() {
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch(
-        `http://localhost:8000/movies/search?q=${encodeURIComponent(query)}`,
+        `${API_BASE_URL}/movies/search?q=${encodeURIComponent(query)}`,
         { headers }
       );
       if (!res.ok) return;
@@ -220,11 +221,11 @@ export default function SearchPage() {
     const wasWatched = movie.watched;
     patchMovie(movie.tmdb_id, { watched: !wasWatched });
     const res = wasWatched
-      ? await fetch(`http://localhost:8000/watched/${movie.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watched/${movie.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watched", {
+      : await fetch(`${API_BASE_URL}/watched`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: movie.tmdb_id }),
@@ -237,11 +238,11 @@ export default function SearchPage() {
     const wasInWatchlist = movie.in_watchlist;
     patchMovie(movie.tmdb_id, { in_watchlist: !wasInWatchlist });
     const res = wasInWatchlist
-      ? await fetch(`http://localhost:8000/watchlist/${movie.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watchlist/${movie.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watchlist", {
+      : await fetch(`${API_BASE_URL}/watchlist`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: movie.tmdb_id }),

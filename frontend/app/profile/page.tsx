@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 
@@ -38,10 +39,10 @@ export default function ProfilePage() {
     setToken(currentToken);
 
     const [favRes, profRes] = await Promise.all([
-      fetch("http://localhost:8000/favorites", {
+      fetch(`${API_BASE_URL}/favorites`, {
         headers: { Authorization: `Bearer ${currentToken}` },
       }),
-      fetch("http://localhost:8000/profile", {
+      fetch(`${API_BASE_URL}/profile`, {
         headers: { Authorization: `Bearer ${currentToken}` },
       }),
     ]);
@@ -68,12 +69,12 @@ export default function ProfilePage() {
     if (!token) return;
     setSaving(true);
     await Promise.all([
-      fetch("http://localhost:8000/profile/location", {
+      fetch(`${API_BASE_URL}/profile/location`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ location: locationInput }),
       }),
-      fetch("http://localhost:8000/profile/picture", {
+      fetch(`${API_BASE_URL}/profile/picture`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ profile_picture_url: pictureInput }),

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,10 +23,10 @@ export default function LoginPage() {
 
     const accessToken = data.session?.access_token;
     const [favRes, profRes] = await Promise.all([
-      fetch("http://localhost:8000/favorites", {
+      fetch(`${API_BASE_URL}/favorites`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
-      fetch("http://localhost:8000/profile", {
+      fetch(`${API_BASE_URL}/profile`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
     ]);

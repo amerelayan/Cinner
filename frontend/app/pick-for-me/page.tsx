@@ -6,6 +6,7 @@ import { getAccessToken } from "@/lib/supabaseClient";
 import RatingBadge from "@/components/RatingBadge";
 import TrackButton from "@/components/TrackButton";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { API_BASE_URL } from "@/lib/api";
 
 type Movie = {
   tmdb_id: number;
@@ -85,7 +86,7 @@ export default function PickForMePage() {
   useEffect(() => {
     async function init() {
       setToken(await getAccessToken());
-      const res = await fetch("http://localhost:8000/genres");
+      const res = await fetch(`${API_BASE_URL}/genres`);
       if (res.ok) {
         const data = await res.json();
         setAllGenres(data.genres ?? []);
@@ -103,7 +104,7 @@ export default function PickForMePage() {
   async function fetchBatch(a: Answers): Promise<Movie[]> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch("http://localhost:8000/pick-for-me", {
+    const res = await fetch(`${API_BASE_URL}/pick-for-me`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -192,11 +193,11 @@ export default function PickForMePage() {
     const was = tracked.watched;
     setTracked((t) => ({ ...t, watched: !was }));
     const res = was
-      ? await fetch(`http://localhost:8000/watched/${current.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watched/${current.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watched", {
+      : await fetch(`${API_BASE_URL}/watched`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: current.tmdb_id }),
@@ -209,11 +210,11 @@ export default function PickForMePage() {
     const was = tracked.in_watchlist;
     setTracked((t) => ({ ...t, in_watchlist: !was }));
     const res = was
-      ? await fetch(`http://localhost:8000/watchlist/${current.tmdb_id}`, {
+      ? await fetch(`${API_BASE_URL}/watchlist/${current.tmdb_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
-      : await fetch("http://localhost:8000/watchlist", {
+      : await fetch(`${API_BASE_URL}/watchlist`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ tmdb_id: current.tmdb_id }),
