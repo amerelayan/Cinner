@@ -49,6 +49,25 @@ def _quality_anchor(movie: dict) -> float:
     )
 
 
+# Cosine similarity ranges -1..1 in theory, but in this 114-dimension space
+# it never gets close to using that full range in practice, in either
+# direction. Checked directly: even a real user's own literal favorite
+# (a movie that helped build their taste vector) only reached cosine 0.79,
+# and a genuinely mismatched movie (a modern blockbuster against a classic-
+# crime-leaning taste) still scored 0.31 — not near 0. That's not a bug in
+# any one movie; with 114 sparse dimensions, two *different* movies (even a
+# person's own favorite vs. their own taste vector) essentially never align
+# perfectly, and a completely unrelated movie still shares some baseline
+# (language, being a movie at all, moderate popularity). Naively rescaling
+# either the full -1..1 range or a clamped 0..1 range still compresses every
+# real result into a narrow, high-looking band. These bounds are calibrated
+# to where real cosine values actually land, so a genuine best-possible
+# match reads near 100 and a genuinely poor one reads convincingly low
+# instead of merely "less high."
+MATCH_COSINE_FLOOR = 0.2
+MATCH_COSINE_CEILING = 0.8
+
+
 def compute_match_percentage(taste_vector: np.ndarray, movie_vector: np.ndarray) -> float:
     taste_norm = np.linalg.norm(taste_vector)
     movie_norm = np.linalg.norm(movie_vector)
@@ -56,11 +75,8 @@ def compute_match_percentage(taste_vector: np.ndarray, movie_vector: np.ndarray)
         return 0.0
 
     cosine = float(np.dot(taste_vector, movie_vector) / (taste_norm * movie_norm))
-    # Cosine similarity ranges -1..1; movie vectors are mostly non-negative so
-    # in practice this rarely goes very negative, but clamp before rescaling
-    # to 0-100 so a genuinely opposite match still reads as a low percentage
-    # rather than a nonsensical negative one.
-    return round(max(0.0, min(1.0, (cosine + 1) / 2)) * 100, 1)
+    stretched = (cosine - MATCH_COSINE_FLOOR) / (MATCH_COSINE_CEILING - MATCH_COSINE_FLOOR)
+    return round(max(0.0, min(1.0, stretched)) * 100, 1)
 
 
 def fit_rating_model(rated_movies: list[tuple[np.ndarray, float]]) -> Ridge | None:
