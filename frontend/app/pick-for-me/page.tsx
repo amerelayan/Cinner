@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import RatingBadge from "@/components/RatingBadge";
 import TrackButton from "@/components/TrackButton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Movie = {
   tmdb_id: number;
@@ -336,7 +337,9 @@ export default function PickForMePage() {
       )}
 
       {view === "loading" && (
-        <p className="mt-16 text-center text-sm text-muted">Searching for your movie...</p>
+        <div className="mt-16">
+          <LoadingSpinner size="lg" label="Searching for your movie..." />
+        </div>
       )}
 
       {view === "empty" && (

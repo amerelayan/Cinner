@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import TrackButton from "@/components/TrackButton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Movie = {
   tmdb_id: number;
@@ -138,7 +139,7 @@ function MovieRow({
       </div>
 
       {loading ? (
-        <p className="mt-5 text-sm text-muted">Loading...</p>
+        <LoadingSpinner size="sm" />
       ) : (
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
           {visible.map((movie) => (

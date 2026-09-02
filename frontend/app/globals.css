@@ -91,3 +91,19 @@ a {
     animation: none !important;
   }
 }
+
+@keyframes cinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cinner-spin {
+  animation: cinner-spin 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinner-spin {
+    animation: none !important;
+  }
+}

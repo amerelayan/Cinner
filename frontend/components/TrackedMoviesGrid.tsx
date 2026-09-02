@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Movie = {
   tmdb_id: number;
@@ -61,7 +62,7 @@ export default function TrackedMoviesGrid({
 
       {error && <p className="mt-6 text-sm text-muted">{error}</p>}
 
-      {!error && movies === null && <p className="mt-6 text-sm text-muted">Loading...</p>}
+      {!error && movies === null && <LoadingSpinner size="md" />}
 
       {!error && movies !== null && movies.length === 0 && (
         <p className="mt-6 text-sm text-muted">{emptyMessage}</p>

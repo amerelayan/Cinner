@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import FavoritesPicker from "@/components/FavoritesPicker";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -111,7 +112,7 @@ export default function EditFavoritesPage() {
       </div>
 
       {favorites === null ? (
-        <p className="mt-6 text-sm text-muted">{message || "Loading..."}</p>
+        message ? <p className="mt-6 text-sm text-muted">{message}</p> : <LoadingSpinner size="md" />
       ) : (
         <div className="mt-8 rounded border border-border bg-surface p-6 sm:p-8">
           <p className="mb-4 text-center text-sm text-muted">{favorites.length}/5 selected</p>

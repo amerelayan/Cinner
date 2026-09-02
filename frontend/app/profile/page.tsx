@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 
@@ -94,7 +95,7 @@ export default function ProfilePage() {
   if (!profile || !favorites) {
     return (
       <main className="flex flex-1 items-center justify-center px-4">
-        <p className="text-muted">Loading...</p>
+        <LoadingSpinner size="lg" />
       </main>
     );
   }

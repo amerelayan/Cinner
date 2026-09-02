@@ -7,6 +7,7 @@ import { getAccessToken } from "@/lib/supabaseClient";
 import RatingBadge from "@/components/RatingBadge";
 import TrackButton from "@/components/TrackButton";
 import StarRating from "@/components/StarRating";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type MovieDetail = {
   tmdb_id: number;
@@ -173,7 +174,7 @@ export default function MovieDetailPage() {
   if (!movie) {
     return (
       <main className="flex flex-1 items-center justify-center px-4">
-        <p className="text-muted">Loading...</p>
+        <LoadingSpinner size="lg" />
       </main>
     );
   }

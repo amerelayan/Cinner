@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/supabaseClient";
 import FavoritesPicker from "@/components/FavoritesPicker";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Favorite = { tmdb_id: number; title: string; poster_path: string | null };
 type SearchResult = {
@@ -206,7 +207,7 @@ export default function OnboardingPage() {
   if (step === null) {
     return (
       <main className="flex flex-1 items-center justify-center px-4">
-        <p className="text-muted">Loading...</p>
+        <LoadingSpinner size="lg" />
       </main>
     );
   }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import TrackButton from "@/components/TrackButton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 type Movie = {
   tmdb_id: number;
@@ -268,10 +269,10 @@ export default function ForYouPage() {
       <h1 className="font-display text-2xl text-foreground sm:text-3xl">For You</h1>
 
       {loading && (
-        <p className="mt-6 text-sm text-muted">
-          Building your recommendations — this looks at your ratings, favorites, and preferences,
-          so it can take a few seconds...
-        </p>
+        <LoadingSpinner
+          size="lg"
+          label="Building your recommendations — this looks at your ratings, favorites, and preferences, so it can take a few seconds..."
+        />
       )}
 
       {error && <p className="mt-6 text-sm text-accent">{error}</p>}
