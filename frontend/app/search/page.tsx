@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/supabaseClient";
 import TrackButton from "@/components/TrackButton";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -159,6 +159,14 @@ function MovieRow({
 }
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner size="lg" />}>
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchPageInner() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [token, setToken] = useState<string | null>(null);
