@@ -33,6 +33,8 @@ from app.tmdb import (
 VALID_AGE_PREFERENCES = [
     "new", "last_5_years", "last_10_years", "last_20_years", "25_plus_years", "no_preference",
 ]
+VALID_MOODS = ["happy", "sad", "stressed", "excited", "neutral"]
+VALID_TIME_AVAILABLE = ["short", "long", "doesnt_matter"]
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 TMDB_ACCESS_TOKEN = os.environ.get("TMDB_ACCESS_TOKEN")
@@ -665,6 +667,8 @@ class PickForMeRequest(BaseModel):
     genres: list[str]
     age_preference: str
     prefers_imdb_top_250: bool
+    mood: str = "neutral"
+    time_available: str = "doesnt_matter"
 
     @field_validator("genres")
     @classmethod
@@ -683,6 +687,20 @@ class PickForMeRequest(BaseModel):
             raise ValueError(f"age_preference must be one of {VALID_AGE_PREFERENCES}")
         return value
 
+    @field_validator("mood")
+    @classmethod
+    def validate_mood(cls, value: str) -> str:
+        if value not in VALID_MOODS:
+            raise ValueError(f"mood must be one of {VALID_MOODS}")
+        return value
+
+    @field_validator("time_available")
+    @classmethod
+    def validate_time_available(cls, value: str) -> str:
+        if value not in VALID_TIME_AVAILABLE:
+            raise ValueError(f"time_available must be one of {VALID_TIME_AVAILABLE}")
+        return value
+
 
 @app.post("/pick-for-me")
 async def pick_for_me(payload: PickForMeRequest, user: dict | None = Depends(get_optional_user)):
@@ -692,6 +710,8 @@ async def pick_for_me(payload: PickForMeRequest, user: dict | None = Depends(get
         genre_ids,
         payload.age_preference,
         payload.prefers_imdb_top_250,
+        payload.mood,
+        payload.time_available,
         user["sub"] if user else None,
     )
     return {"movies": movies}

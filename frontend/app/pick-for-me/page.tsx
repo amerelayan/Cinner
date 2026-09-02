@@ -26,6 +26,8 @@ type Answers = {
   genres: string[];
   agePreference: string;
   prefersImdbTop250: boolean;
+  mood: string;
+  timeAvailable: string;
 };
 
 const AGE_OPTIONS: { value: string; label: string }[] = [
@@ -35,6 +37,20 @@ const AGE_OPTIONS: { value: string; label: string }[] = [
   { value: "last_20_years", label: "Last 20 years" },
   { value: "25_plus_years", label: "25+ years" },
   { value: "no_preference", label: "No preference" },
+];
+
+const MOOD_OPTIONS: { value: string; label: string }[] = [
+  { value: "happy", label: "Happy — keep it going" },
+  { value: "sad", label: "Down — cheer me up" },
+  { value: "stressed", label: "Stressed — something easy" },
+  { value: "excited", label: "Excited — give me a rush" },
+  { value: "neutral", label: "No particular mood" },
+];
+
+const TIME_OPTIONS: { value: string; label: string }[] = [
+  { value: "short", label: "Under 100 min" },
+  { value: "long", label: "Have all night" },
+  { value: "doesnt_matter", label: "Doesn't matter" },
 ];
 
 const CHIP =
@@ -55,6 +71,8 @@ export default function PickForMePage() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [ageChoice, setAgeChoice] = useState("");
   const [imdbTop250, setImdbTop250] = useState<boolean | null>(null);
+  const [moodChoice, setMoodChoice] = useState("");
+  const [timeChoice, setTimeChoice] = useState("");
 
   const [view, setView] = useState<View>("quiz");
   const [error, setError] = useState("");
@@ -91,6 +109,8 @@ export default function PickForMePage() {
         genres: a.genres,
         age_preference: a.agePreference,
         prefers_imdb_top_250: a.prefersImdbTop250,
+        mood: a.mood,
+        time_available: a.timeAvailable,
       }),
     });
     if (!res.ok) throw new Error("request failed");
@@ -99,10 +119,23 @@ export default function PickForMePage() {
   }
 
   async function handleSubmitQuiz() {
-    if (selectedGenres.length === 0 || !ageChoice || imdbTop250 === null) return;
+    if (
+      selectedGenres.length === 0 ||
+      !ageChoice ||
+      imdbTop250 === null ||
+      !moodChoice ||
+      !timeChoice
+    )
+      return;
     setError("");
     setView("loading");
-    const a: Answers = { genres: selectedGenres, agePreference: ageChoice, prefersImdbTop250: imdbTop250 };
+    const a: Answers = {
+      genres: selectedGenres,
+      agePreference: ageChoice,
+      prefersImdbTop250: imdbTop250,
+      mood: moodChoice,
+      timeAvailable: timeChoice,
+    };
     setAnswers(a);
     try {
       const batch = await fetchBatch(a);
@@ -235,6 +268,36 @@ export default function PickForMePage() {
           </div>
 
           <div className="mt-10">
+            <p className="mb-4 text-center text-sm text-muted">How are you feeling today?</p>
+            <div className="flex flex-wrap justify-center gap-2.5">
+              {MOOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setMoodChoice(opt.value)}
+                  className={moodChoice === opt.value ? CHIP_ACTIVE : CHIP}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-10">
+            <p className="mb-4 text-center text-sm text-muted">How much time do you have?</p>
+            <div className="flex flex-wrap justify-center gap-2.5">
+              {TIME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTimeChoice(opt.value)}
+                  className={timeChoice === opt.value ? CHIP_ACTIVE : CHIP}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-10">
             <p className="mb-4 text-center text-sm text-muted">
               Do you want a critically acclaimed pick (IMDb&apos;s Top 250 tier), or are you open to anything decent?
             </p>
@@ -256,7 +319,13 @@ export default function PickForMePage() {
 
           <div className="mt-12 flex justify-center">
             <button
-              disabled={selectedGenres.length === 0 || !ageChoice || imdbTop250 === null}
+              disabled={
+                selectedGenres.length === 0 ||
+                !ageChoice ||
+                imdbTop250 === null ||
+                !moodChoice ||
+                !timeChoice
+              }
               onClick={handleSubmitQuiz}
               className={PRIMARY_BUTTON}
             >

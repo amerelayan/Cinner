@@ -12,6 +12,7 @@ relevant pool rather than TMDB's entire catalog.
 import asyncio
 from collections import Counter
 
+from app.recommendations.diversity import diversify
 from app.recommendations.score import (
     compute_match_percentage,
     fit_rating_model,
@@ -66,7 +67,8 @@ async def _score_pool(
         rows = await conn.fetch(
             """
             SELECT id, title, release_date, poster_path, genres, main_cast, director,
-                   language, runtime_minutes, vote_count, popularity, tmdb_rating, imdb_rating, keywords
+                   language, runtime_minutes, vote_count, popularity, tmdb_rating, imdb_rating,
+                   collection_id, keywords
             FROM public.movies WHERE id = ANY($1::int[])
             """,
             candidate_ids,
@@ -89,11 +91,17 @@ async def _score_pool(
                 "tmdb_rating": movie["tmdb_rating"],
                 "imdb_rating": movie["imdb_rating"],
                 "vote_count": movie["vote_count"],
+                "collection_id": movie["collection_id"],
             }
         )
 
     scored.sort(key=lambda m: m["match_pct"], reverse=True)
-    return scored[:SECTION_SIZE]
+    # Caps how many results from the same franchise/series can appear in one
+    # section — otherwise the top of a ranked-by-similarity list tends to
+    # cluster around whichever series scores highest (e.g. every Batman movie
+    # a user has shown interest in), which reads as repetitive rather than
+    # genuinely varied even though each individual pick is a fair match.
+    return diversify(scored, SECTION_SIZE)
 
 
 async def build_for_you(pool, user_id: str) -> dict:
@@ -186,9 +194,14 @@ async def build_for_you(pool, user_id: str) -> dict:
             preferred_genre_ids,
             vote_count_gte=HIGHEST_MATCH_MIN_VOTES,
             vote_average_gte=HIGHEST_MATCH_MIN_RATING,
+            pages=2,
         ),
         fetch_discover_by_genres(
-            preferred_genre_ids, vote_count_gte=50, vote_count_lte=2000, vote_average_gte=6.5
+            preferred_genre_ids,
+            vote_count_gte=50,
+            vote_count_lte=2000,
+            vote_average_gte=6.5,
+            pages=2,
         ),
         asyncio.gather(*(fetch_recommendations(row["movie_id"]) for row in favorites[:5])),
         fetch_recommendations(seed_row["movie_id"]) if seed_row else asyncio.sleep(0, result=[]),
@@ -229,8 +242,10 @@ async def build_for_you(pool, user_id: str) -> dict:
         and (m["vote_count"] or 0) >= HIGHEST_MATCH_MIN_VOTES
     ]
 
-    highest_match = sorted(quality_pool, key=lambda m: m["match_pct"], reverse=True)[:SECTION_SIZE]
-    rate_highly = sorted(quality_pool, key=lambda m: m["predicted_rating"], reverse=True)[:SECTION_SIZE]
+    highest_match = diversify(sorted(quality_pool, key=lambda m: m["match_pct"], reverse=True), SECTION_SIZE)
+    rate_highly = diversify(
+        sorted(quality_pool, key=lambda m: m["predicted_rating"], reverse=True), SECTION_SIZE
+    )
 
     return {
         "highest_match": highest_match,

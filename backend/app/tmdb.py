@@ -118,6 +118,12 @@ async def fetch_movie_details(tmdb_id: int) -> dict:
         # details response — used to look up real IMDb/Rotten Tomatoes scores
         # via OMDb without any fuzzy title/year matching.
         "imdb_id": data.get("imdb_id"),
+        # Which franchise/series this belongs to (e.g. "Spider-Man Collection"),
+        # if any — already free on this same response. Used to keep a single
+        # franchise from crowding out a recommendation batch (see
+        # app.recommendations.diversity), the same problem real recommenders
+        # counter with explicit diversity/exploration mechanisms.
+        "collection_id": (data.get("belongs_to_collection") or {}).get("id"),
     }
 
 
@@ -173,6 +179,9 @@ async def fetch_discover_by_genres(
     vote_average_gte: float | None = None,
     release_date_gte: str | None = None,
     release_date_lte: str | None = None,
+    runtime_gte: int | None = None,
+    runtime_lte: int | None = None,
+    pages: int = 1,
 ) -> list[dict]:
     """Lets TMDB do the broad filtering (genre, vote-count band) server-side,
     so our own scoring only has to rank an already-relevant candidate pool
@@ -181,7 +190,12 @@ async def fetch_discover_by_genres(
     once) — the goal is "movies matching any genre this user likes," not
     "movies that are simultaneously every one of these genres," which for a
     varied taste (e.g. both Crime and Science Fiction) would return almost
-    nothing."""
+    nothing.
+
+    `pages` fetches multiple TMDB result pages (20 movies each) concurrently
+    and concatenates them — a single page was measurably too small a universe
+    to pick a genuinely varied batch from repeatedly (the same handful of
+    popular titles kept reappearing across regenerations)."""
     params = {
         "with_genres": "|".join(str(g) for g in genre_ids),
         "sort_by": "popularity.desc",
@@ -196,7 +210,28 @@ async def fetch_discover_by_genres(
         params["primary_release_date.gte"] = release_date_gte
     if release_date_lte is not None:
         params["primary_release_date.lte"] = release_date_lte
-    return await _fetch_movie_list("/discover/movie", params=params)
+    if runtime_gte is not None:
+        params["with_runtime.gte"] = runtime_gte
+    if runtime_lte is not None:
+        params["with_runtime.lte"] = runtime_lte
+
+    results = await asyncio.gather(
+        *(
+            _fetch_movie_list("/discover/movie", params={**params, "page": page})
+            for page in range(1, pages + 1)
+        ),
+        return_exceptions=True,
+    )
+    movies = []
+    seen_ids = set()
+    for page_result in results:
+        if isinstance(page_result, BaseException):
+            continue
+        for movie in page_result:
+            if movie["tmdb_id"] not in seen_ids:
+                seen_ids.add(movie["tmdb_id"])
+                movies.append(movie)
+    return movies
 
 
 async def fetch_movie_basic(tmdb_id: int) -> dict:
@@ -233,8 +268,8 @@ async def ensure_movie_cached(conn, tmdb_id: int) -> None:
         INSERT INTO public.movies
             (id, title, release_date, poster_path, synopsis, director, genres, main_cast, language,
              runtime_minutes, keywords, vote_count, popularity, tmdb_rating, imdb_id, imdb_rating,
-             rotten_tomatoes_rating)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+             rotten_tomatoes_rating, collection_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO NOTHING
         """,
         movie["id"],
@@ -254,6 +289,7 @@ async def ensure_movie_cached(conn, tmdb_id: int) -> None:
         movie["imdb_id"],
         ratings["imdb_rating"],
         ratings["rotten_tomatoes_rating"],
+        movie["collection_id"],
     )
 
 
@@ -303,8 +339,8 @@ async def ensure_movies_cached_bulk(pool, tmdb_ids: list[int]) -> None:
             INSERT INTO public.movies
                 (id, title, release_date, poster_path, synopsis, director, genres, main_cast, language,
                  runtime_minutes, keywords, vote_count, popularity, tmdb_rating, imdb_id, imdb_rating,
-                 rotten_tomatoes_rating)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                 rotten_tomatoes_rating, collection_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             ON CONFLICT (id) DO NOTHING
             """,
             [
@@ -326,6 +362,7 @@ async def ensure_movies_cached_bulk(pool, tmdb_ids: list[int]) -> None:
                     movie["imdb_id"],
                     ratings["imdb_rating"],
                     ratings["rotten_tomatoes_rating"],
+                    movie["collection_id"],
                 )
                 for movie, ratings in zip(movies, ratings_list)
             ],
