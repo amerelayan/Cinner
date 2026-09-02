@@ -73,6 +73,14 @@ def _empirical_release_date_ceiling(release_dates: list) -> str | None:
     return date(ceiling_year, 12, 31).isoformat()
 
 
+def _passes_quality(movie: dict, min_rating: float, min_votes: int) -> bool:
+    """Prefers the real IMDb rating (via OMDb) when we have it, over TMDB's
+    own — same preference used everywhere else quality is checked."""
+    return (movie["imdb_rating"] or movie["tmdb_rating"] or 0) >= min_rating and (
+        movie["vote_count"] or 0
+    ) >= min_votes
+
+
 async def _score_pool(
     pool,
     candidates: list[dict],
@@ -80,6 +88,8 @@ async def _score_pool(
     taste_vector,
     rated_movies,
     model,
+    min_rating: float | None = None,
+    min_votes: int | None = None,
 ) -> list[dict]:
     seen: set[int] = set()
     candidate_ids = []
@@ -126,6 +136,15 @@ async def _score_pool(
                 "collection_id": movie["collection_id"],
             }
         )
+
+    # Applied here, before truncation to SECTION_SIZE — filtering afterward
+    # would be too late: sorting by raw match % first and only then checking
+    # quality can throw away genuinely good candidates that simply didn't
+    # crack the top few by cosine similarity alone (a pool of 100 candidates
+    # can easily have its top 8 by similarity all be obscure, low-vote
+    # titles, discarding well-reviewed ones ranked a little lower).
+    if min_rating is not None or min_votes is not None:
+        scored = [m for m in scored if _passes_quality(m, min_rating or 0.0, min_votes or 0)]
 
     scored.sort(key=lambda m: m["match_pct"], reverse=True)
     # Caps how many results from the same franchise/series can appear in one
@@ -277,10 +296,25 @@ async def build_for_you(pool, user_id: str) -> dict:
     )
     favorite_recs = [movie for recs in favorite_recs_lists for movie in recs]
 
+    # TMDB's own /recommendations (what "Based on Your Favorites" and
+    # "Because You Liked X" are built from) can return genuinely obscure,
+    # poorly-reviewed titles that merely share genre/theme with a favorite —
+    # a low-budget knockoff can share enough surface traits with a beloved
+    # classic to score deceptively high on Match % despite being a bad movie.
+    # Cosine similarity alone can't tell "similar taste-wise" from "actually
+    # worth watching", so both pools get the same quality floor Highest
+    # Match already has, passed into _score_pool itself so it's applied
+    # before truncating to the top few by similarity, not after.
     genre_scored, based_on_favorites, because_you_liked, hidden_gems = await asyncio.gather(
         _score_pool(pool, genre_pool, exclude_ids, taste_vector, rated_movies, model),
-        _score_pool(pool, favorite_recs, exclude_ids, taste_vector, rated_movies, model),
-        _score_pool(pool, seed_recs, exclude_ids, taste_vector, rated_movies, model),
+        _score_pool(
+            pool, favorite_recs, exclude_ids, taste_vector, rated_movies, model,
+            genre_pool_min_rating, HIGHEST_MATCH_MIN_VOTES,
+        ),
+        _score_pool(
+            pool, seed_recs, exclude_ids, taste_vector, rated_movies, model,
+            genre_pool_min_rating, HIGHEST_MATCH_MIN_VOTES,
+        ),
         _score_pool(pool, hidden_gems_pool, exclude_ids, taste_vector, rated_movies, model),
     )
 
@@ -299,18 +333,13 @@ async def build_for_you(pool, user_id: str) -> dict:
             if existing is None or movie["match_pct"] > existing["match_pct"]:
                 combined[movie["tmdb_id"]] = movie
 
-    # Movies sourced via TMDB's own /recommendations (favorite_recs, seed_recs)
-    # can't be pre-filtered by rating OR release date server-side the way the
-    # genre-discover pool can, so both are enforced here too, uniformly
-    # across every source, right before ranking these two specific sections.
-    # Rating prefers the real IMDb rating (via OMDb) when we have it, over
-    # TMDB's own. Release-date strings compare correctly as plain strings
-    # since they're ISO 8601 (YYYY-MM-DD).
+    # Release date also can't be pre-filtered server-side for /recommendations
+    # -sourced movies, so it's enforced here too. Release-date strings compare
+    # correctly as plain strings since they're ISO 8601 (YYYY-MM-DD).
     quality_pool = [
         m
         for m in combined.values()
-        if (m["imdb_rating"] or m["tmdb_rating"] or 0) >= genre_pool_min_rating
-        and (m["vote_count"] or 0) >= HIGHEST_MATCH_MIN_VOTES
+        if _passes_quality(m, genre_pool_min_rating, HIGHEST_MATCH_MIN_VOTES)
         and (release_date_lte is None or not m["release_date"] or m["release_date"] <= release_date_lte)
         and (release_date_gte is None or not m["release_date"] or m["release_date"] >= release_date_gte)
     ]
