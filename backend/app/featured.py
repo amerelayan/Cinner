@@ -59,18 +59,33 @@ async def get_featured_pool() -> list[dict]:
         if len(movies) < MIN_VIABLE_POOL_SIZE:
             return movies
 
-        # Real IMDb rating, preferred over TMDB's own — same one-time cost as
-        # the rest of this pool, paid once per process lifetime rather than
-        # per homepage visit.
-        ratings_results = await asyncio.gather(
-            *(fetch_omdb_ratings(movie["imdb_id"]) for movie in movies), return_exceptions=True
-        )
-        for movie, ratings in zip(movies, ratings_results):
-            imdb_rating = None if isinstance(ratings, BaseException) else ratings["imdb_rating"]
-            movie["imdb_rating"] = imdb_rating if imdb_rating is not None else movie["tmdb_rating"]
+        # Real IMDb rating is nice to have but isn't worth blocking the very
+        # first homepage visit on: fetching it for the whole ~100-movie pool
+        # up front (an earlier version of this code did exactly that) added
+        # another ~100 concurrent OMDb calls in *sequence* after the TMDB
+        # fetch above, turning what should be one ~2-3s wait into ~12s —
+        # exactly the delay a visitor would see before any poster appears.
+        # TMDB's own rating is used immediately as a safe placeholder, and
+        # a background task swaps in the real IMDb rating shortly after,
+        # mutating these same cached dicts in place — so nobody's homepage
+        # load is ever gated on OMDb, only its first render is briefly less
+        # precise.
+        for movie in movies:
+            movie["imdb_rating"] = movie["tmdb_rating"]
 
         _pool_cache = movies
+        asyncio.create_task(_enrich_with_imdb_ratings(movies))
         return _pool_cache
+
+
+async def _enrich_with_imdb_ratings(movies: list[dict]) -> None:
+    ratings_results = await asyncio.gather(
+        *(fetch_omdb_ratings(movie["imdb_id"]) for movie in movies), return_exceptions=True
+    )
+    for movie, ratings in zip(movies, ratings_results):
+        imdb_rating = None if isinstance(ratings, BaseException) else ratings["imdb_rating"]
+        if imdb_rating is not None:
+            movie["imdb_rating"] = imdb_rating
 
 
 def pick_random_featured(pool: list[dict], count: int) -> list[dict]:
