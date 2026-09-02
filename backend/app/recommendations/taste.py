@@ -30,7 +30,13 @@ so this mattered more than the vector math itself once measured.
 
 import numpy as np
 
-from app.recommendations.vectorize import LANGUAGE_DIMS, VECTOR_DIMS, _encode_genres, vectorize_movie
+from app.recommendations.vectorize import (
+    DIMENSION_WEIGHTS,
+    LANGUAGE_DIMS,
+    VECTOR_DIMS,
+    _encode_genres,
+    vectorize_movie,
+)
 from app.tmdb import VALID_GENRES
 
 FAVORITE_WEIGHT = 1.0
@@ -98,7 +104,11 @@ def _encode_preferences(profile: dict, prestige_affinity: bool = False) -> np.nd
         vector[NUMERIC_START + 2] = 0.9
         vector[NUMERIC_START + 4] = 0.9
 
-    return vector
+    # Must share vectorize_movie's per-dimension scale (numeric weighted up,
+    # cast/director down) — otherwise this synthetic vector and real movie
+    # vectors would disagree on what a "1.0" means in the numeric block,
+    # silently distorting Match % for anyone leaning on onboarding data.
+    return vector * DIMENSION_WEIGHTS
 
 
 async def _fetch_user_interactions(conn, user_id: str) -> dict:

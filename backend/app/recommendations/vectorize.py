@@ -5,13 +5,21 @@ for it, so any two movies' vectors can be compared directly (e.g. via cosine
 similarity, added in a later step) to answer "how alike are these two movies".
 
 Vector layout (114 dimensions total):
-    genres      19 dims  - multi-hot over TMDB's 19 canonical genres
-    language    10 dims  - one-hot over a fixed set of common languages, plus "other"
-    numeric      5 dims  - release year, runtime, vote count, popularity, TMDB rating
-                           (all normalized to roughly 0-1)
-    director    16 dims  - hashed
-    cast        32 dims  - hashed
-    keywords    32 dims  - hashed
+    genres      19 dims  - multi-hot over TMDB's 19 canonical genres           (weight 1.0)
+    language    10 dims  - one-hot over a fixed set of common languages,
+                           plus "other"                                        (weight 1.0)
+    numeric      5 dims  - release year, runtime, vote count, popularity,
+                           TMDB rating (all normalized to roughly 0-1)          (weight 2.0)
+    director    16 dims  - hashed                                              (weight 0.5)
+    cast        32 dims  - hashed                                              (weight 0.5)
+    keywords    32 dims  - hashed                                              (weight 1.0)
+
+Raw dimension count isn't the same as actual influence on cosine similarity —
+cast and keywords together are 64 of 114 dimensions and tend to have several
+non-zero entries each, while numeric is just 5 single values, so without
+correction cast/keyword overlap quietly dominates more meaningful signals
+like genre or rating. DIMENSION_WEIGHTS corrects this explicitly rather than
+leaving it as an accident of the encoding scheme.
 
 Cast, director, and keywords use the "hashing trick": each name/tag is mapped
 into one of a small fixed number of buckets via a hash function, rather than
@@ -43,6 +51,35 @@ MAX_YEAR = 2030
 MAX_RUNTIME_MINUTES = 240
 MAX_VOTE_COUNT = 50_000
 MAX_POPULARITY = 500
+
+# Raw dimension COUNT doesn't equal actual influence on cosine similarity —
+# cast and keywords together are 64 of 114 dimensions and tend to have
+# several non-zero entries each (5 cast members, many keywords), while the
+# numeric block is just 5 single values, so cast/keyword overlap was quietly
+# dominating match scores over more meaningful signals like genre or rating.
+# These multipliers correct that directly: numeric counts for more, cast and
+# director for less. Applied to the whole 114-dim vector as one weight mask,
+# used identically for both real movie vectors (vectorize_movie) and the
+# synthetic onboarding-preference vector (taste.py's _encode_preferences) —
+# they have to share the same per-dimension scale or cosine similarity
+# between a taste vector and a movie vector stops being meaningful.
+GENRE_WEIGHT = 1.0
+LANGUAGE_WEIGHT = 1.0
+NUMERIC_WEIGHT = 2.0
+DIRECTOR_WEIGHT = 0.5
+CAST_WEIGHT = 0.5
+KEYWORD_WEIGHT = 1.0
+
+DIMENSION_WEIGHTS = np.concatenate(
+    [
+        np.full(len(VALID_GENRES), GENRE_WEIGHT),
+        np.full(LANGUAGE_DIMS, LANGUAGE_WEIGHT),
+        np.full(NUMERIC_DIMS, NUMERIC_WEIGHT),
+        np.full(DIRECTOR_DIMS, DIRECTOR_WEIGHT),
+        np.full(CAST_DIMS, CAST_WEIGHT),
+        np.full(KEYWORD_DIMS, KEYWORD_WEIGHT),
+    ]
+)
 
 
 def _clamp01(value: float) -> float:
@@ -113,7 +150,7 @@ def vectorize_movie(movie: dict) -> np.ndarray:
     """
     director = [movie["director"]] if movie.get("director") else []
 
-    return np.concatenate(
+    raw = np.concatenate(
         [
             _encode_genres(movie.get("genres")),
             _encode_language(movie.get("language")),
@@ -123,3 +160,4 @@ def vectorize_movie(movie: dict) -> np.ndarray:
             _hashed_encode(movie.get("keywords") or [], KEYWORD_DIMS),
         ]
     )
+    return raw * DIMENSION_WEIGHTS
