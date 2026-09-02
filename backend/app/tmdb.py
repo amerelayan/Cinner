@@ -182,6 +182,7 @@ async def fetch_discover_by_genres(
     runtime_gte: int | None = None,
     runtime_lte: int | None = None,
     pages: int = 1,
+    sort_by: str = "popularity.desc",
 ) -> list[dict]:
     """Lets TMDB do the broad filtering (genre, vote-count band) server-side,
     so our own scoring only has to rank an already-relevant candidate pool
@@ -198,7 +199,7 @@ async def fetch_discover_by_genres(
     popular titles kept reappearing across regenerations)."""
     params = {
         "with_genres": "|".join(str(g) for g in genre_ids),
-        "sort_by": "popularity.desc",
+        "sort_by": sort_by,
         "vote_count.gte": vote_count_gte,
         "include_adult": "false",
     }

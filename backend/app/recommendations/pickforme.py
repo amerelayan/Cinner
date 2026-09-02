@@ -12,9 +12,9 @@ considered — not stored history.
 """
 
 import random
-from datetime import date, timedelta
 
 from app.recommendations.diversity import diversify
+from app.recommendations.era import era_to_date_range
 from app.recommendations.score import (
     compute_match_percentage,
     fit_rating_model,
@@ -35,17 +35,6 @@ ACCLAIMED_MIN_VOTES = 5000
 # requiring acclaimed-classic status.
 DEFAULT_MIN_RATING = 6.0
 DEFAULT_MIN_VOTES = 200
-
-ERA_YEARS_BACK = {"new": 1, "last_5_years": 5, "last_10_years": 10, "last_20_years": 20}
-
-
-def _era_to_date_range(era: str) -> tuple[str | None, str | None]:
-    today = date.today()
-    if era in ERA_YEARS_BACK:
-        return (today - timedelta(days=365 * ERA_YEARS_BACK[era])).isoformat(), None
-    if era == "25_plus_years":
-        return None, (today - timedelta(days=365 * 25)).isoformat()
-    return None, None  # no_preference
 
 
 # A deliberately simple, explainable mapping rather than a learned signal —
@@ -92,7 +81,7 @@ async def pick_movies(
     time_available: str,
     user_id: str | None,
 ) -> list[dict]:
-    release_date_gte, release_date_lte = _era_to_date_range(age_preference)
+    release_date_gte, release_date_lte = era_to_date_range(age_preference)
     min_rating, min_votes = (
         (ACCLAIMED_MIN_RATING, ACCLAIMED_MIN_VOTES)
         if prefers_imdb_top_250

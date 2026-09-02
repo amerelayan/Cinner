@@ -11,8 +11,10 @@ relevant pool rather than TMDB's entire catalog.
 
 import asyncio
 from collections import Counter
+from datetime import date
 
 from app.recommendations.diversity import diversify
+from app.recommendations.era import era_to_date_range
 from app.recommendations.score import (
     compute_match_percentage,
     fit_rating_model,
@@ -39,6 +41,36 @@ DEFAULT_GENRE_IDS = list(GENRE_NAME_TO_TMDB_ID.values())[:3]
 # these two sections entirely, rather than just ranking them lower.
 HIGHEST_MATCH_MIN_RATING = 6.0
 HIGHEST_MATCH_MIN_VOTES = 200
+# Used instead of the floor above when the user has said (at onboarding)
+# that they specifically care about critically-acclaimed movies — "prefers
+# high-rated movies" should mean something stronger than the default floor,
+# not the same threshold as everyone else.
+ACCLAIMED_MIN_RATING = 7.0
+
+# Real behavior needs at least this many dated movies before it's trusted to
+# override the onboarding era answer — mirrors the same threshold idea used
+# for genre and prestige-affinity elsewhere in this module/taste.py.
+MIN_ENGAGED_FOR_EMPIRICAL_ERA = 3
+# How much newer than the median a candidate is still allowed to be — a
+# person whose real history centers on 2005 clearly isn't limited to *only*
+# 2005, so this gives room above the median rather than a hard cutoff at it.
+EMPIRICAL_ERA_HEADROOM_YEARS = 8
+
+
+def _empirical_release_date_ceiling(release_dates: list) -> str | None:
+    """If real behavior (favorites, highly-rated, watched) clearly skews
+    older, cap the candidate pool's release date so "Highest Match" can't be
+    dominated by whatever's currently popular and new — which is exactly
+    what TMDB's own popularity-sorted /discover otherwise tends to surface,
+    regardless of what a person's actual history looks like. This is a real
+    filter on which movies are even considered, not just one diluted number
+    inside the 114-dimension taste vector."""
+    years = sorted(d.year for d in release_dates if d)
+    if len(years) < MIN_ENGAGED_FOR_EMPIRICAL_ERA:
+        return None
+    median_year = years[len(years) // 2]
+    ceiling_year = min(median_year + EMPIRICAL_ERA_HEADROOM_YEARS, date.today().year)
+    return date(ceiling_year, 12, 31).isoformat()
 
 
 async def _score_pool(
@@ -108,7 +140,7 @@ async def build_for_you(pool, user_id: str) -> dict:
     async with pool.acquire() as conn:
         favorites = await conn.fetch(
             """
-            SELECT f.movie_id, m.title, m.genres FROM public.favorites f
+            SELECT f.movie_id, m.title, m.genres, m.release_date FROM public.favorites f
             JOIN public.movies m ON m.id = f.movie_id
             WHERE f.user_id = $1 ORDER BY f.created_at
             """,
@@ -122,11 +154,19 @@ async def build_for_you(pool, user_id: str) -> dict:
             """,
             user_id,
         )
-        highly_rated_genres = await conn.fetch(
+        highly_rated = await conn.fetch(
             """
-            SELECT m.genres FROM public.ratings r
+            SELECT m.genres, m.release_date FROM public.ratings r
             JOIN public.movies m ON m.id = r.movie_id
             WHERE r.user_id = $1 AND r.rating >= 7
+            """,
+            user_id,
+        )
+        watched_dates = await conn.fetch(
+            """
+            SELECT m.release_date FROM public.watched w
+            JOIN public.movies m ON m.id = w.movie_id
+            WHERE w.user_id = $1
             """,
             user_id,
         )
@@ -161,7 +201,7 @@ async def build_for_you(pool, user_id: str) -> dict:
     for row in favorites:
         for g in row["genres"] or []:
             genre_counts[g] += 1
-    for row in highly_rated_genres:
+    for row in highly_rated:
         for g in row["genres"] or []:
             genre_counts[g] += 1
 
@@ -174,6 +214,30 @@ async def build_for_you(pool, user_id: str) -> dict:
         if g in GENRE_NAME_TO_TMDB_ID
     ]
     preferred_genre_ids = list(dict.fromkeys(taste_genre_ids + onboarding_genre_ids)) or DEFAULT_GENRE_IDS
+
+    # Same "real behavior over a one-time onboarding answer" precedent as
+    # genre above, applied to era — previously era only ever came from the
+    # onboarding question (often "no_preference", meaning no signal at all)
+    # and only ever nudged one diluted vector dimension, never actually
+    # filtered which movies got fetched as candidates in the first place.
+    engaged_release_dates = (
+        [row["release_date"] for row in favorites]
+        + [row["release_date"] for row in highly_rated]
+        + [row["release_date"] for row in watched_dates]
+    )
+    empirical_date_lte = _empirical_release_date_ceiling(engaged_release_dates)
+    onboarding_date_gte, onboarding_date_lte = era_to_date_range(
+        profile["preferred_movie_age"] if profile else None
+    )
+    release_date_lte = empirical_date_lte or onboarding_date_lte
+    release_date_gte = onboarding_date_gte if empirical_date_lte is None else None
+
+    # A stated preference for critically-acclaimed movies should mean a
+    # meaningfully higher bar and a pool actually sorted by quality — not
+    # just the same floor everyone else gets.
+    prefers_acclaimed = bool(profile and profile.get("prefers_imdb_top_250"))
+    genre_pool_min_rating = ACCLAIMED_MIN_RATING if prefers_acclaimed else HIGHEST_MATCH_MIN_RATING
+    genre_pool_sort_by = "vote_average.desc" if prefers_acclaimed else "popularity.desc"
 
     # "Because you liked X" seeds from their single highest-rated movie, or —
     # for someone who hasn't rated anything yet — their first favorite, so
@@ -193,7 +257,10 @@ async def build_for_you(pool, user_id: str) -> dict:
         fetch_discover_by_genres(
             preferred_genre_ids,
             vote_count_gte=HIGHEST_MATCH_MIN_VOTES,
-            vote_average_gte=HIGHEST_MATCH_MIN_RATING,
+            vote_average_gte=genre_pool_min_rating,
+            release_date_gte=release_date_gte,
+            release_date_lte=release_date_lte,
+            sort_by=genre_pool_sort_by,
             pages=2,
         ),
         fetch_discover_by_genres(
@@ -201,6 +268,8 @@ async def build_for_you(pool, user_id: str) -> dict:
             vote_count_gte=50,
             vote_count_lte=2000,
             vote_average_gte=6.5,
+            release_date_gte=release_date_gte,
+            release_date_lte=release_date_lte,
             pages=2,
         ),
         asyncio.gather(*(fetch_recommendations(row["movie_id"]) for row in favorites[:5])),
@@ -231,15 +300,19 @@ async def build_for_you(pool, user_id: str) -> dict:
                 combined[movie["tmdb_id"]] = movie
 
     # Movies sourced via TMDB's own /recommendations (favorite_recs, seed_recs)
-    # can't be pre-filtered by rating server-side the way the genre-discover
-    # pool can, so the floor is enforced here too, uniformly across every
-    # source, right before ranking these two specific sections. Prefers the
-    # real IMDb rating (via OMDb) when we have it, over TMDB's own.
+    # can't be pre-filtered by rating OR release date server-side the way the
+    # genre-discover pool can, so both are enforced here too, uniformly
+    # across every source, right before ranking these two specific sections.
+    # Rating prefers the real IMDb rating (via OMDb) when we have it, over
+    # TMDB's own. Release-date strings compare correctly as plain strings
+    # since they're ISO 8601 (YYYY-MM-DD).
     quality_pool = [
         m
         for m in combined.values()
-        if (m["imdb_rating"] or m["tmdb_rating"] or 0) >= HIGHEST_MATCH_MIN_RATING
+        if (m["imdb_rating"] or m["tmdb_rating"] or 0) >= genre_pool_min_rating
         and (m["vote_count"] or 0) >= HIGHEST_MATCH_MIN_VOTES
+        and (release_date_lte is None or not m["release_date"] or m["release_date"] <= release_date_lte)
+        and (release_date_gte is None or not m["release_date"] or m["release_date"] >= release_date_gte)
     ]
 
     highest_match = diversify(sorted(quality_pool, key=lambda m: m["match_pct"], reverse=True), SECTION_SIZE)
