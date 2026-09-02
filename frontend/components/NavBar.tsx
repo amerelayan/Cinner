@@ -11,6 +11,7 @@ const NAV_LINK =
 
 export default function NavBar() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setLoggedIn(!!data.session));
@@ -85,8 +86,35 @@ export default function NavBar() {
               </Link>
             </>
           )}
+
+          <button
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label="Toggle menu"
+            aria-expanded={menuOpen}
+            className="flex h-8 w-8 items-center justify-center text-muted transition-colors hover:text-foreground sm:hidden"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {menuOpen && (
+        <nav className="flex flex-col gap-1 border-t border-border px-4 py-3 text-sm tracking-wide text-muted sm:hidden">
+          <Link href="/search" className="py-2" onClick={() => setMenuOpen(false)}>
+            MOVIES
+          </Link>
+          <Link href="/pick-for-me" className="py-2" onClick={() => setMenuOpen(false)}>
+            PICK FOR ME
+          </Link>
+          {loggedIn && (
+            <Link href="/for-you" className="py-2" onClick={() => setMenuOpen(false)}>
+              FOR YOU
+            </Link>
+          )}
+        </nav>
+      )}
     </header>
   );
 }
